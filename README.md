@@ -1,5 +1,15 @@
 # Mdkdebug —— 可被 AI 工具调用的 Keil uVision 调试服务
 
+<!-- badge 区：静态徽标，不引入需要跟版本号同步的第四处（版本号仍只有三处：__init__.py / pyproject.toml / 目录树） -->
+[![MCP](https://img.shields.io/badge/MCP-server-6f42c1)](https://modelcontextprotocol.io)
+[![Python](https://img.shields.io/badge/Python-3.10%2B-3776ab)](https://www.python.org)
+[![License](https://img.shields.io/badge/license-MIT-2ea44f)](LICENSE)
+[![Platform](https://img.shields.io/badge/platform-Windows-0078d4)](#已知限制)
+[![主源 gitee](https://img.shields.io/badge/%E4%B8%BB%E6%BA%90-gitee.com%2Fxw19981010-ff5a5f)](https://gitee.com/xw19981010/mdk_agent_mcp)
+[![镜像 GitHub](https://img.shields.io/badge/%E9%95%9C%E5%83%8F-github.com%2Fxw1998-181717)](https://github.com/xw1998/mdk_agent_mcp)
+
+> **仓库**：主源在 [gitee](https://gitee.com/xw19981010/mdk_agent_mcp)，[GitHub](https://github.com/xw1998/mdk_agent_mcp) 是只读镜像（两边代码一致，issue / PR 请提到 gitee）。
+
 > **你只要把线接好，剩下的交给 AI。**
 
 通过 **UVSOCK/TCP** 协议连接 Keil uVision 调试器，以 **MCP（Model Context Protocol）Server**
@@ -947,6 +957,29 @@ modbus_session(action="close")                 # 用完把口还回去
   「不同工程」（此时 `close_uvision(keep=...)` 仍可用，只是 `project` 过滤可能不命中）；
 - `enter_debug` 受工程 `Load` / `Flash Download` / `Run-to-main` 设置影响，属有副作用的操作。
 
+## 发版与镜像同步
+
+版本号只在三处出现，发版就是同时改这三处（其余位置一律引用 `__version__`，不抄数字）：
+
+1. `mdkdebug/__init__.py` 的 `__version__`
+2. `pyproject.toml` 的 `version`
+3. 本 README「目录结构」里那行「包初始化（版本号 x.y.z）」
+
+一次发行按顺序做完，中间不停：
+
+```bash
+python tools/run_all_tests.py                      # 全量闸门（约 9 分钟），必须全绿
+git add <逐个列出改动的文件>                        # 不要 git add -A，避免把垃圾文件带进去
+git commit -m "批次NN（x.y.z）：..."
+git tag -a x.y.z -m "..."                          # 附注标签，不用轻量标签
+git push origin master && git push origin x.y.z    # 主源 gitee
+git push github master && git push github x.y.z    # 只读镜像 GitHub
+git ls-remote --tags origin | grep x.y.z           # 自证：远端真有这个标签
+```
+
+镜像仓只做同步、不接 PR：两边应当逐提交一致，`git log --oneline` 对得上才算同步成功。
+
+---
 ## 许可证
 
 本项目采用 **MIT License**。完整许可证正文见 [LICENSE](./LICENSE)。
