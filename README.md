@@ -8,7 +8,7 @@
 [![主源 gitee](https://img.shields.io/badge/%E4%B8%BB%E6%BA%90-gitee.com%2Fxw19981010-ff5a5f)](https://gitee.com/xw19981010/mdk_agent_mcp)
 [![镜像 GitHub](https://img.shields.io/badge/%E9%95%9C%E5%83%8F-github.com%2Fxw1998-181717)](https://github.com/xw1998/mdk_agent_mcp)
 
-> **仓库**：主源在 [gitee](https://gitee.com/xw19981010/mdk_agent_mcp)，[GitHub](https://github.com/xw1998/mdk_agent_mcp) 是只读镜像（两边代码一致，issue / PR 请提到 gitee）。
+> **仓库**：主源在 [gitee](https://gitee.com/xw19981010/mdk_agent_mcp)；[GitHub](https://github.com/xw1998/mdk_agent_mcp) 是**由 gitee 自动同步**的只读镜像（两边逐提交一致，issue / PR 请提到 gitee）。
 
 > **你只要把线接好，剩下的交给 AI。**
 
@@ -972,12 +972,13 @@ python tools/run_all_tests.py                      # 全量闸门（约 9 分钟
 git add <逐个列出改动的文件>                        # 不要 git add -A，避免把垃圾文件带进去
 git commit -m "批次NN（x.y.z）：..."
 git tag -a x.y.z -m "..."                          # 附注标签，不用轻量标签
-git push origin master && git push origin x.y.z    # 主源 gitee
-git push github master && git push github x.y.z    # 只读镜像 GitHub
+git push origin master && git push origin x.y.z    # 只推 gitee，镜像由 gitee 自动同步
 git ls-remote --tags origin | grep x.y.z           # 自证：远端真有这个标签
 ```
 
-镜像仓只做同步、不接 PR：两边应当逐提交一致，`git log --oneline` 对得上才算同步成功。
+**GitHub 镜像由 gitee 仓库自身的镜像功能自动推送**（不是手动 `git push`），所以本地只需要认 gitee 一个远端；
+镜像只读、不接 PR，两边应当逐提交一致，`git log --oneline` 对得上才算同步成功。
+手动往 GitHub 推会和自动同步打架，不要这么做。
 
 ---
 ## 许可证
