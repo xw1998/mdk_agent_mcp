@@ -239,7 +239,7 @@ mdk_agent/
 ├── requirements.txt          # Python 依赖
 ├── README.md
 ├── mdkdebug/
-│   ├── __init__.py           # 包初始化（版本号 0.2.26）
+│   ├── __init__.py           # 包初始化（版本号 0.2.27）
 │   ├── cli.py                # 命令行入口（main，mdkdebug 命令）
 │   ├── uvsock.py             # UVSOCK 协议：命令码、VSET/AMEM/EXECCMD 打包与解析
 │   ├── interface.py          # TCP 物理接口层（含异步消息残留清理）
@@ -1709,6 +1709,15 @@ uVision 再打开就报错。批次97 把这条纪律做成**工具能执行的�
 > 晚于崩溃。现在示例的 `command` 直接指向 `run_server.cmd`（Linux 用 `run_server.sh`），
 > 并给出「宿主只放可执行文件时把 `-E -s -u` 写进 `args`」的后路；`test_batch101` 增加
 > `F10`/`F11` 两条断言盯着示例块，防止下次又漂回去。
+> **批次103 补丁（0.2.27）**：自愈重启的**形态判断**有洞——它只看 `argv[0]` 是不是文件，
+> 于是把「包内模块脚本」和「控制台启动器」都当成真脚本按路径重启：
+> `python -m mdkdebug.cli`（`argv[0]` 是包里的 `cli.py`）脱离包上下文后第一行
+> `from .bootstrap import ...` 就是 `attempted relative import with no known parent package`；
+> 而 `pip install` 生成的 `Scripts\mdkdebug.exe` 被 `python x.exe` 执行只会 `SyntaxError`。
+> 现在分四种形态：`__main__.py`→`-m mdkdebug`；包内 `.py`→`-c` + `runpy.run_module`
+> 并显式把包的父目录插回 `sys.path`（`-E` 会剥掉 PYTHONPATH）；普通 `.py`→按绝对路径；
+> 非 `.py` 启动器→`-m mdkdebug`。毒化 `PYTHONPATH` 下三种入口都能起，`test_batch101`
+> 新增 `A22`~`A26` 与端到端 `B8` 盯着这条。
 
 ### 逆向语义层：字符串 / 死代码 / 两镜像差分 / 栈深 / 数据表（批次102）
 

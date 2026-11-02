@@ -1,5 +1,8 @@
 # Python
 __pycache__/
+# 打包产物（python -m build）：只发布，不入库
+dist/
+build/
 *.py[cod]
 *.egg-info/
 .venv/

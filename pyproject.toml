@@ -1,21 +1,31 @@
 [build-system]
-requires = ["setuptools>=68"]
+requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "mdkdebug"
-version = "0.2.26"
+version = "0.2.27"
 description = "可被 AI 工具调用的 Keil uVision 调试服务（MCP Server）——UVSOCK 在线调试 + UV4 编译烧录闭环"
 readme = "README.md"
 requires-python = ">=3.10"
-license = { text = "MIT" }
-keywords = ["keil", "uvision", "mcp", "uvsock", "debug", "stm32", "cortex-m"]
+license = "MIT"
+license-files = ["LICENSE"]
+keywords = ["keil", "uvision", "mcp", "model-context-protocol", "uvsock", "debug", "debugger", "embedded", "stm32", "cortex-m", "arm", "reverse-engineering", "ai-agent"]
 authors = [{ name = "mdkdebug" }]
 classifiers = [
-    "Programming Language :: Python :: 3",
-    "License :: OSI Approved :: MIT License",
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
     "Operating System :: Microsoft :: Windows",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
     "Topic :: Software Development :: Debuggers",
+    "Topic :: Software Development :: Embedded Systems",
+    "Typing :: Typed",
 ]
 dependencies = [
     "mcp>=2.0",
@@ -30,6 +40,15 @@ dependencies = [
 
 [project.scripts]
 mdkdebug = "mdkdebug.cli:main"
+
+# 包页面的「主页 / 源码 / 问题」链接。主源是 gitee，GitHub 只是它的自动镜像，
+# 所以四个 URL 全部指向 gitee（Mirror 单独给出 GitHub，避免第三方站把镜像当主源）。
+[project.urls]
+Homepage = "https://gitee.com/xw19981010/mdk_agent_mcp"
+Repository = "https://gitee.com/xw19981010/mdk_agent_mcp"
+Issues = "https://gitee.com/xw19981010/mdk_agent_mcp/issues"
+Documentation = "https://gitee.com/xw19981010/mdk_agent_mcp#readme"
+Mirror = "https://github.com/xw1998/mdk_agent_mcp"
 
 [tool.setuptools]
 # 子包必须显式列出来（原来只有 mdkdebug，viz 与 codeindex 都不会被装进 wheel）：

@@ -87,22 +87,65 @@ def is_isolated(env: dict | None = None) -> bool:
     return str(env.get(GUARD_VAR) or "") == "1"
 
 
+def package_module(script: str) -> tuple[str, str] | None:
+    """脚本若位于一个**包内**，返回 (包的父目录, "pkg.mod")；否则 None。
+
+    `python -m mdkdebug.cli`（`sys.argv[0]` 是包里的 `cli.py`）与
+    `python mdkdebug/cli.py` 都属这一类：此时**不能**按脚本路径重启——直接执行文件
+    会丢掉 `__package__`，模块里第一行 `from .bootstrap import ...` 立刻变成
+    "attempted relative import with no known parent package"（真机踩过：宿主设了
+    PYTHONPATH 时，`mdkdebug` 反而起不来）。必须带着包上下文按模块重启。
+    """
+    script = os.path.abspath(script)
+    stem = os.path.splitext(os.path.basename(script))[0]
+    if stem == "__main__" or not stem.isidentifier():
+        return None
+    parts = [stem]
+    cur = os.path.dirname(script)
+    while os.path.isfile(os.path.join(cur, "__init__.py")):
+        name = os.path.basename(cur)
+        if not name.isidentifier():
+            return None
+        parts.insert(0, name)
+        parent = os.path.dirname(cur)
+        if parent == cur:
+            return None
+        cur = parent
+    if len(parts) < 2:          # 普通脚本（如 run_server.py），不在包内
+        return None
+    return cur, ".".join(parts)
+
+
 def reexec_command(argv: list | None = None, exe: str | None = None) -> list:
     """构造自愈用的命令行（`-E -s` + 原 argv 形态）。可单独测试，不执行。
 
-    三种形态分开处理：
+    四种形态分开处理：
 
     - `python -m mdkdebug`：``argv[0]`` 是包里的 `__main__.py`，**不能**当脚本路径重启
       （那样 `mdkdebug` 就不在 `sys.path` 上），必须保持 `-m mdkdebug`；
+    - 包内模块脚本（`python -m mdkdebug.cli` / `python mdkdebug/cli.py`）：用 `runpy`
+      按模块重启，并显式把包的父目录插进 `sys.path`（`-E` 会剥掉 PYTHONPATH）；
     - 真实脚本（`python run_server.py`）：按绝对路径重启；
-    - `python -c`：没有可重启的脚本，退回模块入口。
+    - 控制台脚本启动器（`Scripts/mdkdebug.exe`，非 `.py`）/ `python -c` / 其余：
+      没有可重启的 Python 源文件，退回模块入口。
     """
     argv = list(sys.argv if argv is None else argv)
     exe = exe or sys.executable
     if argv and os.path.basename(argv[0]).lower() == "__main__.py":
         return [exe, "-E", "-s", "-m", "mdkdebug"] + argv[1:]
     if argv and os.path.isfile(argv[0]):
-        return [exe, "-E", "-s", os.path.abspath(argv[0])] + argv[1:]
+        if argv[0].lower().endswith(".py"):
+            pm = package_module(argv[0])
+            if pm is not None:
+                parent, mod = pm
+                code = ("import sys;sys.path.insert(0,%r);"
+                        "import runpy;runpy.run_module(%r,run_name='__main__',alter_sys=True)"
+                        % (parent, mod))
+                return [exe, "-E", "-s", "-c", code] + argv[1:]
+            return [exe, "-E", "-s", os.path.abspath(argv[0])] + argv[1:]
+        # 控制台脚本启动器（pip 在 Windows 上生成的是 mdkdebug.exe）：它不是 Python
+        # 源码，`python x.exe` 只会报 SyntaxError，退回模块入口才对。
+        return [exe, "-E", "-s", "-m", "mdkdebug"] + argv[1:]
     if argv[:1] == ["-c"]:
         # `python -c "..."`：`-c` 的代码不能跟着重启（重跑一遍会把业务再跑一次），
         # 只退回模块入口，剩下的参数原样带过去。

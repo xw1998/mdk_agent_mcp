@@ -156,6 +156,28 @@ def section_a():
     check("A21 __version__ 是三段式（版本号本身不在这里断言数值）",
           ver.count(".") == 2 and ver.split(".")[0].isdigit(), ver)
 
+    # 2026-11-02 补：包内模块脚本（`python -m mdkdebug.cli`）与 pip 生成的控制台启动器
+    # （`Scripts/mdkdebug.exe`）以前都被当成「真脚本」按路径重启——前者丢掉 __package__
+    # 后 "from .bootstrap import ..." 直接报 relative import（真机：宿主设了 PYTHONPATH
+    # 时，`mdkdebug` 反而起不来），后者 `python x.exe` 只会 SyntaxError。
+    pm = BOOT.package_module(os.path.join(ROOT, "mdkdebug", "cli.py"))
+    check("A22 package_module：包内脚本给出 (包父目录, 'mdkdebug.cli')",
+          pm is not None and pm[1] == "mdkdebug.cli"
+          and os.path.abspath(pm[0]) == os.path.abspath(ROOT), pm)
+    check("A23 package_module：普通脚本（run_server.py）不算包内模块",
+          BOOT.package_module(os.path.join(ROOT, "run_server.py")) is None)
+    check("A24 package_module：__main__.py 交回 -m 形态处理，不返回模块名",
+          BOOT.package_module(os.path.join(ROOT, "mdkdebug", "__main__.py")) is None)
+
+    c4 = BOOT.reexec_command([os.path.join(ROOT, "mdkdebug", "cli.py"), "--version"], exe=exe)
+    check("A25 `python -m mdkdebug.cli` 形态按模块重启（-c + runpy + 显式 sys.path）",
+          c4[:4] == [exe, "-E", "-s", "-c"] and c4[4].startswith("import sys;sys.path.insert(0,")
+          and "runpy.run_module('mdkdebug.cli'" in c4[4] and c4[-1] == "--version", c4)
+    exe_path = _w("MZ fake launcher\n", "mdkdebug.exe")
+    c5 = BOOT.reexec_command([exe_path, "--version"], exe=exe)
+    check("A26 控制台启动器（非 .py）退回 -m mdkdebug，不当 Python 源码执行",
+          c5 == [exe, "-E", "-s", "-m", "mdkdebug", "--version"], c5)
+
 
 # ----------------------------------------------------------------------------
 # B 端到端：毒化环境下能起
@@ -230,6 +252,13 @@ def section_b():
         rc, out, err = _run(["sh", script, "--version"], bad)
         check("B7 重毒化下 run_server.sh --version 能起", rc == 0 and "mdkdebug" in out,
               (rc, out[-200:], err[-400:]))
+
+    # B8：`python -m mdkdebug.cli`（argv[0] 是包里的 cli.py）在温和毒化下也能自愈起。
+    # 修复前这里会死在 "attempted relative import with no known parent package"。
+    rc, out, err = _run([PY, "-m", "mdkdebug.cli", "--version"], {"PYTHONPATH": mild})
+    check("B8 毒化下 `python -m mdkdebug.cli --version` 自愈后能起（模块重启保住包上下文）",
+          rc == 0 and "mdkdebug" in out and "relative import" not in err,
+          (rc, out[-200:], err[-400:]))
 
 
 # ----------------------------------------------------------------------------
