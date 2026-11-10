@@ -118,6 +118,8 @@ READONLY = {
     # 只在显式给 out 时写 —— 默认路径不碰文件系统（同 image_split 的口径）。
     "recover_strings", "recover_deadcode", "recover_bindiff",
     "recover_datatable", "recover_stack",
+    # 批次105：字节/文本搜索与交叉引用——只读文件字节，不写文件、不碰目标。
+    "recover_search", "recover_xref",
 }
 
 # ----------------------------------------------------------------------

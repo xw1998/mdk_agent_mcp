@@ -239,7 +239,7 @@ mdk_agent/
 ├── requirements.txt          # Python 依赖
 ├── README.md
 ├── mdkdebug/
-│   ├── __init__.py           # 包初始化（版本号 0.2.28）
+│   ├── __init__.py           # 包初始化（版本号 0.2.29）
 │   ├── cli.py                # 命令行入口（main，mdkdebug 命令）
 │   ├── uvsock.py             # UVSOCK 协议：命令码、VSET/AMEM/EXECCMD 打包与解析
 │   ├── interface.py          # TCP 物理接口层（含异步消息残留清理）
@@ -256,7 +256,7 @@ mdk_agent/
 │   ├── linkio.py             # 链路原语层：把「读/写内存、读核寄存器、停/走」从 Keil(UVSOCK) 与 OpenOCD 里抽出来
 │   ├── traceproto.py         # trace 协议：ITM 解码、MTF 帧格式与 CRC8
 │   ├── trace.py              # trace：SWO / RTT（主机侧自研）/ SWD 采样 / DWT / 插桩组件部署（观测类工具两条链路通用）
-│   └── server.py             # MCP Server 与 220 个工具定义
+│   └── server.py             # MCP Server 与 222 个工具定义
 ├── components/
 │   └── trace/                # 目标侧插桩组件（ITM / RTT / UART / BUFF 四后端，只依赖 CMSIS）
 │                             #   mdk_trace.[ch] / mdk_trace_rtt.[ch] / config 默认头 / CMakeLists / README
@@ -350,9 +350,9 @@ mdkdebug read_mem --arg addr=0x20000000 --arg n=16     # 省略 call 的简写
 
 ## 暴露的 MCP 工具
 
-共 **220** 个（**默认只暴露 44 个**，其余按需装载，见[工具面](#工具面默认精简--按需装载)），分两大块：
+共 **222** 个（**默认只暴露 44 个**，其余按需装载，见[工具面](#工具面默认精简--按需装载)），分两大块：
 
-- **MDK 族（132 个）**——调试读写 / 断点与命中等待 / 外设与内存 / 符号定位 / 工程分析 / **编译·清理·烧录** / **UV4 命令行批处理调试** / **CMSIS-SVD 解码** / **工程文件与分散加载文件(.sct)受控编辑** / **复位循环识别** / Keil 生命周期管理 / **宿主机串口日志与命令应答 · Modbus 主站（RTU/ASCII + 裸帧）** / **看门狗冻结与 Cache 感知** / 环境自检引导（下表）。
+- **MDK 族（134 个）**——调试读写 / 断点与命中等待 / 外设与内存 / 符号定位 / 工程分析 / **编译·清理·烧录** / **UV4 命令行批处理调试** / **CMSIS-SVD 解码** / **工程文件与分散加载文件(.sct)受控编辑** / **复位循环识别** / Keil 生命周期管理 / **宿主机串口日志与命令应答 · Modbus 主站（RTU/ASCII + 裸帧）** / **看门狗冻结与 Cache 感知** / 环境自检引导（下表）。
 - **非 MDK 族（82 个）**——**工具链**（gcc/make/cmake 探测与调用、构建、ELF/size/objcopy、编译错误解析，10 个）/ **目标档案与多核**（接口·速度·SWO·RTT 参数档案与自动识别、工程现场配置发现、多核目标的核列举与切换，7 个）/ **OpenOCD**（会话·内存·寄存器·断点·烧录，17 个）/ **trace 与覆盖率**（SWO·RTT·采样剖析·DWT·非侵入式 scope·插桩组件部署·**代码覆盖率**·**ETM 能力探测**·**函数运行时线录制**·**目标侧缓冲后端**·**SWD 无缝流后端**·**任务表取名**，38 个）/ **RTOS 任务感知**（任务列表·栈水位·队列信号量，3 个）/ **C 代码索引**（建/同步索引·符号检索·单符号源码体·文件清单·调用关系与影响面，7 个）——不依赖 Keil，同样能在 RISC-V / ESP32 等非 MDK 芯片上工作（见[非 MDK 芯片与 trace](#非-mdk-芯片与-trace不依赖-keil)）。
 - **常驻元工具（6 个）**——`toolset`（工具面按需装载）/ `list_tools` / `capabilities` / `get_version` / `tools_groups` / `tools_load`：**永不被裁**，否则 AI 连工具清单都问不出来、也装不回来。
 - **RTOS 任务感知（3 个，已计在上面非 MDK 族里，单列只为讲清它跨两条链路）**——`rtos_info` / `rtos_tasks` / `rtos_objects`：FreeRTOS 的任务列表、状态、**栈水位**与队列/信号量。**跨两条链路**（有 Keil 会话走 UVSOCK，否则走 OpenOCD），因为「多任务卡死」既发生在 MDK 工程里也发生在 gcc 工程里（见 [RTOS 任务感知](#rtos-任务感知rtos_3-个)）。
@@ -688,13 +688,13 @@ target_guess(elf) → ocd_start(profile=...) → ocd_flash(file=...) → trace_i
 
 ### 工具面（默认精简 + 按需装载）
 
-220 个工具全量塞进上下文会稀释注意力、也吃掉上下文预算。所以**默认只暴露 44 个**（`core` 组 38 个 + 6 个元工具），其余 176 个**没被删掉、也没失效**，用 `toolset` 工具随时装回来：
+222 个工具全量塞进上下文会稀释注意力、也吃掉上下文预算。所以**默认只暴露 44 个**（`core` 组 38 个 + 6 个元工具），其余 178 个**没被删掉、也没失效**，用 `toolset` 工具随时装回来：
 
 ```text
 toolset(action="status")                        # 装了哪些组、收起多少个、怎么装回来
 toolset(action="load",   toolsets="mem,rtos")   # 追加装载（幂等，可反复调）
 toolset(action="unload", toolsets="trace")      # 收起
-toolset(action="load",   toolsets="all")        # 一次全装 220 个（=full/*）
+toolset(action="load",   toolsets="all")        # 一次全装 222 个（=full/*）
 ```
 
 装载也可以放在启动时：`MDKDEBUG_TOOLSETS=serial` 只留串口 14 个、`core,build`、`toolchain,target,ocd,trace` 把上百个 Keil 工具全收起来调非 MDK 芯片；`=all` 回到全开。**启动参数优先于环境变量**。
@@ -706,7 +706,7 @@ toolset(action="load",   toolsets="all")        # 一次全装 220 个（=full/*
 | `core` | 进出调试 / 运行控制 / 状态 / 跨会话状态 / 环境一致性体检、符号工程绑定、断点硬件残留校验、复位循环识别、可视化出图（38 个） |
 | `mem` | 内存与外设读写 / D-Cache 一致性维护（11 个） |
 | `symbol` | 符号与源码定位（7 个；`set_symbol_file`/`list_symbol_projects` 已上移 `core`） |
-| `build` | 编译 / 清理 / 烧录 / 工程配置 / 分散加载文件(.sct)受控编辑 / 固件契约预检、闭环验证 / 镜像取证 / 固件逆向（骨架/字节精确复刻/镜像切分/闭环台账/字符串池与死代码/两镜像逐函数差分/数据表导出/调用图栈深）（36 个） |
+| `build` | 编译 / 清理 / 烧录 / 工程配置 / 分散加载文件(.sct)受控编辑 / 固件契约预检、闭环验证 / 镜像取证 / 固件逆向（骨架/字节精确复刻/镜像切分/闭环台账/字符串池与死代码/两镜像逐函数差分/数据表导出/调用图栈深/字节与文本搜索/交叉引用）（38 个） |
 | `serial` | 宿主机串口监听与命令应答 + Modbus 主站（14 个） |
 | `advanced` | 诊断 / 剖析 / SVD / 工程编辑 / 复位循环识别等进阶能力（26 个） |
 | `toolchain` | 非 MDK：工具链探测 / 构建 / 编译 / ELF·size·objcopy / 编译错误解析（10 个） |
@@ -726,8 +726,8 @@ toolset(action="load",   toolsets="all")        # 一次全装 220 个（=full/*
 |---|---|---|---|---|
 | 默认（`core` 组 + 元工具，描述 `lean`） | 44 | 约 2.2 万 | **约 3.9 万**（−56%） | 不设环境变量 |
 | **`nano` 极简档**（自动用 `min` 描述档） | **19** | **约 6 千** | **约 1.5 万** | `MDKDEBUG_TOOLSETS=nano` 或 `toolset(toolsets="nano")` |
-| `all`（全装，描述默认 `lean`） | 220 | 约 10 万 | 约 20.2 万（−51%） | `toolset(toolsets="all")` |
-| `all` + `MDKDEBUG_DESC=min` | 220 | 约 6.6 万 | 约 16.7 万 | 工具全要，但描述只留一句摘要 |
+| `all`（全装，描述默认 `lean`） | 222 | 约 10 万 | 约 20.2 万（−51%） | `toolset(toolsets="all")` |
+| `all` + `MDKDEBUG_DESC=min` | 222 | 约 6.6 万 | 约 16.7 万 | 工具全要，但描述只留一句摘要 |
 | 上述任一档 + `MDKDEBUG_DESC=full` | — | 逐字节还原全文 | — | 要逐字完整说明时 |
 
 - **`nano` 档**不是「组」而是**档位**：它横跨 `core` / `build` / `trace` 三组，挑出 15 个最短入口（健康检查 / 编译烧录 / 进出调试 / 跑停 / 读写内存与变量 / 断点 / 读 trace / **取回完整说明的 `mdk_guide`**）**＋ 6 个元工具**，小上下文模型也能一次装全，之后再按需加装。
@@ -1753,6 +1753,16 @@ uVision 再打开就报错。批次97 把这条纪律做成**工具能执行的�
 > 统一信封与输出控制照样生效；③ 退出码 0/1/2 分「成功 / 工具报错 / 用法错误」，脚本可判。
 > `MDKDEBUG_CLI=0` 整体关掉。`test_batch104` 用 6 条 `--arg`/`--args`/退出码/`MDKDEBUG_CLI=0`
 > 的端到端断言与三条一致性断言（子命令清单↔parser↔分发表、子命令名不与工具重名）盯着这条。
+> **批次105（0.2.29）：定位线——「这段字节在哪」与「谁在用它」**。逆向做到一定程度会撞上
+> 两个此前**没有工具出口**的问题：① 「这个魔数 / 这段代码在镜像里出现在哪」（`recover_strings`
+> 只找可打印串、`find_symbol` 只认符号名、`search_mem` 搜的是目标在线内存）；
+> ② 「谁调用了这个函数 / 谁在改这个全局变量」（关系早就算出来了，但只作为 `recover_project`
+> 的 `xrefs.csv` 副产品流出，得先导出整个工程再翻表）。现在补 `recover_search` 与
+> `recover_xref` 两条，都只读、都只解析文件字节：搜索给「文件偏移 → 虚拟地址 → 所属节 →
+> 是否可执行」，地址映射不上时 `addr=null` 并按节汇总到 `unmapped_sections`
+> （**不按基址硬加**——段与段之间可以有空洞）；交叉引用给五类关系 + `confidence` 三档
+> （observed / inferred / weak）+ 所属函数，且把「解析不出的间接调用」单独计入 `unresolved`
+> ——「没找到引用者」与「有引用者但看不到」是两件事。`test_batch105` 73 条盯着这条。
 
 
 ### 逆向语义层：字符串 / 死代码 / 两镜像差分 / 栈深 / 数据表（批次102）
@@ -1812,6 +1822,57 @@ uVision 再打开就报错。批次97 把这条纪律做成**工具能执行的�
    必然失败。所以注解层把幂等单独判（`idempotentHint = not in NON_IDEMPOTENT`），
    不再写成「只读 ⇒ 幂等」；证据落盘护栏也从「目标目录名像构建目录」扩到
    「目标目录**在**某个装着源码的构建目录之内」（`Core/Src/rep` 这种新起子目录以前能漏过去）。
+
+### 定位线：字节/文本搜索与交叉引用（批次105）
+
+前面几批解决的是「这段字节是什么指令、属于哪个函数、这个函数/变量叫什么」。批次105 换一个
+问法：**「这段字节在镜像里出现在哪」**（`recover_search`）与 **「谁在用它」**（`recover_xref`）。
+两条都是逆向里最常被问的问题，但此前只有间接路径。
+
+- **`recover_search`（字节模式 / 文本搜索）**：
+  - `pattern` 是十六进制字节对，`??` 表示任意字节；`48 8B ?? 24`、`488b??24`、
+    `48-8B--24`、`48_8B_??_24` 是同一件事（分隔符与通配写法都不挑）。选「最长的定值段」
+    当锚点先用 `bytes.find` 跳候选再逐字节校验，所以通配再多也不会退化成逐位置暴力扫。
+  - `text` 按 `encoding`（`ascii` 默认 / `gbk` / `utf8` / `utf16le`）编码后当定值字节搜。
+    **两个都给时分别搜、分别报**（每条命中的 `via` 说明来自哪一路），不混成一个「都算」。
+  - 每个命中给完整链路：`file_offset`（文件里在哪）→ `addr`（虚拟地址）→
+    `span`（在哪个段里）→ `region`（`code` / `data`）→ `file_section`（在哪个节里，
+    含 `.symtab` / `.debug_*` 这类**非装载节**）。
+  - `addr` 由「文件偏移 → 所在段」换算；**不在任何段里的命中 `addr=null`**，并按节汇总进
+    `unmapped_sections`——不按基址硬加，否则段间空洞会被贴上凭空造出来的地址。
+    实测一个 531 KB 的 `.axf` 搜 `00 00 ?? ?? 01 00`：809 条命中里 805 条落在
+    `.debug_*` / `.symtab` 里，这些字节是**链接期元数据，不是要烧进芯片的内容**，
+    必须能分开看，否则「命中 805 次」会把人带偏。
+  - `start`/`end` 是**地址区间**（不是文件偏移），`offset`/`limit` 分页（`next_offset` 续页），
+    `max_matches` 是计数上限，到顶报 `truncated=true` 并说明**总数只是下限**。
+  - 重叠命中全部报告（同一段字节每挪一位都算一条）；`context` 控制回显的前后字节数。
+  - 限制：命中只说明「这些字节出现在这里」，不说明它是指令、数据还是巧合；1~2 字节的短模式
+    在 32 位常量的低位上会命中很多次。
+- **`recover_xref`（交叉引用：谁在用它）**：给定地址或**精确符号名**（`target` 或 `symbol`，
+  Thumb 位写不写都认），列出五类关系：`call`（直接调用）、`branch`（直接跳转）、
+  `data_read` / `data_write`（含基址寄存器常量传播算出来的结构成员访问，带 `member` 偏移与
+  `base_reg`）、`data_code_pointer`（字面量池里指向代码的指针，弱证据）。
+  每条给 `from`/`from_hex`、所属函数（`func.addr`/`name`）、原始指令文本（`insn`）、
+  `how`（怎么得到的）与 `confidence` 三档：
+  `observed`（指令里直接写着目标）/ `inferred`（常量传播或间接解析算出来的）/
+  `weak`（字面量池里的候选代码指针）。
+  另报 `is_function_entry` + `function`（本地址是不是函数入口、符号名与大小）、
+  `in_vector_table`（是不是复位/中断入口，附 `exception` 名）、`in_image` / `in_code`
+  （`.bss` 里的全局变量在镜像里但不在可执行区——这两个字段故意分开）。
+  **`unresolved` 单独计数**：间接调用（`blx rN`）解析不出目标时**不计入 `referrers`**，
+  只计入这个数字——「没有引用者」与「有引用者但看不到」是两件完全不同的事，
+  混成一个 0 就是假答案。
+  `kinds` 可按类别筛，`max_refs` 限条数（`truncated` 时 `total`/`by_kind` 统计的仍是全部）。
+
+两处**只有做的时候才会踩到**的口径：
+
+1. **`in_image` 不能拿 `unit.spans` 判**：`spans` 只收录「文件里有字节」的节，`.bss`（NOBITS）
+   被跳过，于是 `.bss` 里的全局变量全被判成「不在镜像里」。现在 `in_image` 走
+   `_alloc_ranges`（所有 `alloc` 节，含 NOBITS）——`rx_line@0x20000088` 从 `in_image=false`
+   变成 `true`，同时 `in_code=false`（它在 RAM 里）。
+2. **向量表项的字段不是 `value`**：`vector_table()` 给的是 `handler_hex` + `name`（`Reset` /
+   `NMI` / `HardFault`…），按 `value` 取会静默拿不到、于是 `in_vector_table` 恒为空——
+   一个「永远说不是中断入口」的假答案。现在按 `handler_hex` 比，`addr` / `addr|1` 两种写法都认。
 
 ### 底层库
 

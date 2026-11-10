@@ -112,6 +112,9 @@ TOOLSETS = {
         # 才落盘，其余路径一个字节都不碰。属逆向场景，不进默认面。
         "recover_strings", "recover_deadcode", "recover_bindiff",
         "recover_datatable", "recover_stack",
+        # 批次105：定位线——「这段字节在哪」与「谁在用它」。两者都只读、只解析文件字节，
+        # 属逆向场景，同样不进默认面。
+        "recover_search", "recover_xref",
     },
     "serial": {
         "serial_list_ports", "serial_monitor_start", "serial_monitor_status",

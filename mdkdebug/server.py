@@ -77,6 +77,7 @@ from .numparse import parse_int as _parse_int
 from . import semantics as _sem
 from . import bindiff as _bindiff
 from . import callgraph as _callgraph
+from . import locate as _locate
 
 logger = logging.getLogger("mdkdebug.server")
 
@@ -8097,6 +8098,85 @@ def create_server(host: str = "127.0.0.1", port: int = 4823,
                                            base=_pi(base, "base", 0),
                                            stack_size=_pi(stack_size, "stack_size", 0),
                                            roots=str(roots or ""))
+            return _js(out)
+        except Exception as e:  # noqa: BLE001
+            return _js({"ok": False, "error": str(e)})
+
+    @server.tool(
+        name="recover_search",
+        title="固件逆向：字节模式 / 文本搜索（偏移↔地址↔节）",
+        description=(
+            "在镜像里按**字节模式**或**文本**找东西，每个命中给出完整的定位链路："
+            "文件偏移 → 虚拟地址 → 所属节 → 是否落在可执行区。\n"
+            "为什么要单独一条：recover_strings 只找可打印串、find_symbol 只认符号名、"
+            "search_mem 搜的是**目标在线内存**——三者都回答不了「这段字节在镜像里出现在哪」。\n"
+            "pattern 是十六进制字节对，`??` 表示任意字节（空格/下划线/逗号可省，"
+            "`48 8B ?? 24` 与 `488b??24` 等价）；通配写法 `?` / `??` / `--` 都行。\n"
+            "text 按 encoding（ascii 默认 / gbk / utf8 / utf16le）编码后当定值字节搜。"
+            "两个都给时**分别搜、分别报**（每条的 via 说明来自哪一路），不混成一个「都算」。\n"
+            "start/end 把搜索限制在地址区间里（不是文件偏移）；offset/limit 分页，"
+            "next_offset 给下一页起点；max_matches 是计数上限，到顶 truncated=true 且总数只是下限。\n"
+            "重叠命中全部报告；命中落在没有地址的文件区（.symtab/.debug_*/文件头）时 "
+            "addr=null、file_section 说明是哪一节，并按节汇总到 unmapped_sections——"
+            "那些字节是链接期元数据，不是要烧进芯片的内容。\n"
+            "注意：命中只说明「这些字节出现在这里」，不说明它是指令、数据还是巧合；"
+            "1~2 字节的短模式在 32 位常量的低位上会命中很多次。只读工具。"
+        ),
+    )
+    async def recover_search(path: str, base: str | int = 0, pattern: str = "",
+                             text: str = "", encoding: str = "ascii",
+                             start: str | int = 0, end: str | int = 0,
+                             offset: int = 0, limit: int = 100,
+                             max_matches: int = 20000,
+                             context: int = 16) -> str:
+        try:
+            out = _locate.search(
+                str(path or "").strip(), base=_pi(base, "base", 0),
+                pattern=str(pattern or ""), text=str(text or ""),
+                encoding=str(encoding or "ascii"),
+                start=_pi(start, "start", 0), end=_pi(end, "end", 0),
+                offset=int(offset or 0), limit=int(limit or 100),
+                max_matches=int(max_matches or 20000),
+                context=int(context if context is not None else 16))
+            return _js(out)
+        except Exception as e:  # noqa: BLE001
+            return _js({"ok": False, "error": str(e)})
+
+    @server.tool(
+        name="recover_xref",
+        title="固件逆向：交叉引用（谁调用了 / 谁读了这块地址）",
+        description=(
+            "给定一个地址或符号，列出**谁在用它**：call（直接调用）、branch（直接跳转）、"
+            "data_read / data_write（含基址寄存器常量传播算出来的结构成员访问）、"
+            "data_code_pointer（字面量池里指向代码的指针，弱证据）。\n"
+            "为什么需要它：这些关系本仓库早就算出来了，但只作为 recover_project 的 xrefs.csv "
+            "流出——「谁调用了这个函数 / 谁在改这个全局变量」此前没有直接入口，得先导出整个工程再翻 CSV。\n"
+            "target 可以是地址（0x080030B0 / 十进制）或**精确符号名**；symbol 是显式符号名入口。"
+            "两者都空直接报错，不猜目标。Thumb 位（addr 与 addr|1）两种写法都认。\n"
+            "confidence 三档：observed=指令里直接写着目标；inferred=常量传播/间接解析算出来的"
+            "（依赖前面几条指令的 mov/movt/add）；weak=字面量池里的候选代码指针。\n"
+            "每条还给 from/from_hex、所属函数（func.addr/name）、原始指令文本、how（怎么得到的）。"
+            "另报 is_function_entry / function（本地址是不是函数入口，符号名与大小）、"
+            "in_vector_table（是不是中断/复位入口）、in_image / in_code。\n"
+            "kinds 用逗号筛类别，max_refs 限条数，truncated 为真时 total/by_kind 统计的仍是全部。\n"
+            "限制：「没有引用者」不等于「没人用它」——间接调用（blx rN）解析不出目标时只计入 "
+            "unresolved（不是零引用），函数指针表/中断向量/自修改代码同样看不到；"
+            "结构体成员的访问体现在 base_reg/member 字段里，要按 member 自己汇总。只读工具。"
+        ),
+    )
+    async def recover_xref(path: str, base: str | int = 0, target: str = "",
+                           symbol: str = "", kinds: str = "",
+                           max_refs: int = 200, deep: bool = True,
+                           max_insns: int = 0, max_functions: int = 0) -> str:
+        try:
+            out = _locate.xrefs(
+                str(path or "").strip(), base=_pi(base, "base", 0),
+                target=str(target or ""), symbol=str(symbol or ""),
+                kinds=str(kinds or ""), max_refs=int(max_refs or 200),
+                deep=bool(deep), max_insns=int(max_insns or 0),
+                max_functions=int(max_functions or 0))
+            if out.get("ok"):
+                out.pop("_unit", None)
             return _js(out)
         except Exception as e:  # noqa: BLE001
             return _js({"ok": False, "error": str(e)})

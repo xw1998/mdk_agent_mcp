@@ -141,7 +141,7 @@ def _u32(v):
 def section_a():
     print("A. 工具面与注解")
     total = sum(len(v) for v in TB.TOOLSETS.values()) + len(TB.ALWAYS)
-    check("A1 注册工具总数 220（分组表 204 + 常驻 6）", total == 220, total)
+    check("A1 注册工具总数 222（分组表 204 + 常驻 6）", total == 222, total)
     for t in ("coverage_start", "coverage_read", "coverage_stop", "coverage_clear",
               "trace_etm_probe"):
         check("A2 %s 归在 trace 组" % t, t in (TB.TOOLSETS.get("trace") or []), "")
@@ -169,7 +169,7 @@ def section_a():
               and (an or {}).get("idempotentHint") is False, an)
 
     check("A6 组规模：build 36 / target 7 / trace 38（批次97 归 build）",
-          group_size("build") == 36 and group_size("target") == 7
+          group_size("build") == 38 and group_size("target") == 7
           and group_size("trace") == 38,
           {"build": group_size("build"), "target": group_size("target"),
            "trace": group_size("trace")})
