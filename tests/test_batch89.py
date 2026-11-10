@@ -180,14 +180,42 @@ def section_a():
           and row_of(led7, "bytes.loadable")["claim_status"] == "unknown", led7["summary"])
 
 # ======================================================================
+def _proj_valid(dest) -> bool:
+    """缓存目录里**真的**出全了工程吗——manifest 声明的两个主产物都必须存在。
+
+    为什么不能只看 ``manifest.json`` 在不在：``TMP`` 是按固定名字放的
+    （``%TEMP%/mdk_b89``），一次被中断的运行会留下「目录在、manifest 在、src/ 空」的
+    半成品。只看 manifest 就把这种目录当成「已出好工程」缓存下来，后面的实跑必然报
+    ``armasm`` 失败——**看起来像工具链坏了**（本机 ``%TEMP%`` 里就有一份 10-28 留下的，
+    C1 因此假失败）。宁可重出一份，也不要拿半成品冒充工程。
+    """
+    man_path = os.path.join(dest, "manifest.json")
+    if not os.path.isfile(man_path):
+        return False
+    try:
+        with io.open(man_path, encoding="utf-8") as fp:
+            man = json.load(fp)
+    except Exception:  # noqa: BLE001
+        return False
+    for rel in (man.get("asm") or "src/image_exact.s",
+                man.get("sct") or "linker/recovered.sct"):
+        if not os.path.isfile(os.path.join(dest, str(rel).replace("/", os.sep))):
+            return False
+    return True
+
+
 def exact_project(tag="proj"):
     """跑一次 recover_project_exact（真产物），同一进程内缓存复用。"""
     if tag in _proj_cache:
         return _proj_cache[tag]
     dest = os.path.join(TMP, tag)
-    if os.path.isdir(dest) and os.path.exists(os.path.join(dest, "manifest.json")):
-        _proj_cache[tag] = ({"ok": True, "cached": True}, dest)
-        return _proj_cache[tag]
+    if os.path.isdir(dest):
+        if _proj_valid(dest):
+            _proj_cache[tag] = ({"ok": True, "cached": True}, dest)
+            return _proj_cache[tag]
+        # 半成品（上次被中断）：project_exact 要求 out_dir 不存在，先清掉再重出。
+        import shutil
+        shutil.rmtree(dest, ignore_errors=True)
     r = RC.project_exact(AXF, dest, name="exact", include_asm=False,
                          emit_uvprojx=False)
     _proj_cache[tag] = (r, dest)
@@ -195,6 +223,19 @@ def exact_project(tag="proj"):
 
 def section_b():
     print("\nB 工具层：claim 参数")
+    # 回归：中断留下的「目录在 / manifest 在 / 产物空」必须判无效（否则实跑假失败）
+    half = os.path.join(TMP, "halfway_probe")
+    if not os.path.isdir(os.path.join(half, "src")):
+        os.makedirs(os.path.join(half, "src"), exist_ok=True)
+        with io.open(os.path.join(half, "manifest.json"), "w",
+                     encoding="utf-8") as fp:
+            fp.write(json.dumps({"asm": "src/image_exact.s",
+                                 "sct": "linker/recovered.sct"}))
+    check("B-0 半成品工程（只有 manifest、产物为空）判为无效缓存",
+          _proj_valid(half) is False)
+    import shutil as _sh
+    _sh.rmtree(half, ignore_errors=True)
+
     r, dest = exact_project()
     check("B0 前置：recover_project_exact 出得来工程", r.get("ok") is True,
           r.get("error"))

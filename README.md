@@ -239,7 +239,7 @@ mdk_agent/
 ├── requirements.txt          # Python 依赖
 ├── README.md
 ├── mdkdebug/
-│   ├── __init__.py           # 包初始化（版本号 0.2.27）
+│   ├── __init__.py           # 包初始化（版本号 0.2.28）
 │   ├── cli.py                # 命令行入口（main，mdkdebug 命令）
 │   ├── uvsock.py             # UVSOCK 协议：命令码、VSET/AMEM/EXECCMD 打包与解析
 │   ├── interface.py          # TCP 物理接口层（含异步消息残留清理）
@@ -321,6 +321,32 @@ python run_server.py --transport http --http-port 8300
 | `--http-host` / `--http-port` | `127.0.0.1` / `8300` | HTTP 传输时的监听地址 |
 | `--uv4-path` | 自动探测 | Keil `UV4.exe` 绝对路径，缺省时自动探测（如 `D:/Keil_v5/UV4/UV4.exe`） |
 | `--default-project` | 无 | 默认待编译 / 烧录的 `.uvprojx` 工程路径，工具调用可省略 `project` 参数 |
+
+### 命令行直调工具（批次104：不进 MCP 客户端）
+
+同一张工具表**也能当命令用**——现场排障、写脚本、放进 CI，都不必先配一个 MCP 客户端：
+
+```bash
+mdkdebug tools                        # 有哪些工具（按组 / 一句话 / 必填参数 / 风险）
+mdkdebug tools --group build --json   # 机器可读：{"count":N,"tools":[{name,group,summary,required,risk}]}
+mdkdebug groups                       # 有哪些组（组名 / 声明数 / 当前可见数）
+mdkdebug describe read_mem            # 完整说明 + 参数表 + 可照抄的调用示例
+mdkdebug call read_mem --arg addr=0x20000000 --arg n=16
+mdkdebug read_mem --arg addr=0x20000000 --arg n=16     # 省略 call 的简写
+```
+
+- **参数怎么给**：`--args '<JSON 对象>'` 或 `--args @params.json`（UTF-8，容忍 BOM）；也可
+  `--arg k=v` 重复多次。值先按 JSON 认（`16`→整数、`1.5`→浮点、`true`→布尔、`[1,2]`→列表），
+  认不出来就**原样当字符串**——`0x20000000` 这类十六进制字面量交回工具自己的地址解析
+  （在这里硬转成数字才是「看似聪明的错答案」）。
+- **退出码给脚本用**：`0` 成功；`1` 工具报错（理由在同一条 JSON 里，`status=error`）；
+  `2` 用法错误（子命令写错、`--arg` 没有 `=`、`--args` 不是对象）。**读不到就给非 0**，不静默成功。
+- **CLI 不是第二条实现**：它就是 `server.call_tool`——参数别名归一、未知参数拒绝、统一结果信封
+  （`status` / `next_actions` / `error_code` / `risk`）、输出控制（`--compact` / `--full` /
+  `--max-lines N`）与 MCP 客户端调用**同一条路径**。
+- **默认行为一个字不改**：不带位置参数仍是 stdio 服务端，`--version` / `--host 127.0.0.1` 仍走原解析器
+  （只认**第一个**位置参数，所以 `--host` 的值不会被当成工具名）；`MDKDEBUG_CLI=0` 可把这一层
+  整体关掉，回到批次104 之前的纯服务端解析。
 
 ## 暴露的 MCP 工具
 
@@ -1718,6 +1744,16 @@ uVision 再打开就报错。批次97 把这条纪律做成**工具能执行的�
 > 并显式把包的父目录插回 `sys.path`（`-E` 会剥掉 PYTHONPATH）；普通 `.py`→按绝对路径；
 > 非 `.py` 启动器→`-m mdkdebug`。毒化 `PYTHONPATH` 下三种入口都能起，`test_batch101`
 > 新增 `A22`~`A26` 与端到端 `B8` 盯着这条。
+> **批次104（0.2.28）：工具即 CLI 子命令**。此前 220 个工具**只能**通过 MCP 客户端调用，
+> 于是「现场只想看一眼 `get_status`」「把编译→烧录→读某地址串成一条命令」「让只会跑命令的
+> Agent 用上这些工具」这三种场景全部落空。现在新增 `mdkdebug/toolcli.py`：`tools` / `groups` /
+> `describe` / `call` 四个子命令，且**工具名可以省略 `call` 直接当子命令**。
+> 三条硬约束：① 路由只认**第一个位置参数**（不以 `-` 开头），所以无参启动、`--version`、
+> `--host 127.0.0.1` 全部照旧；② CLI 走的就是 `server.call_tool`，不复制一份参数处理，
+> 统一信封与输出控制照样生效；③ 退出码 0/1/2 分「成功 / 工具报错 / 用法错误」，脚本可判。
+> `MDKDEBUG_CLI=0` 整体关掉。`test_batch104` 用 6 条 `--arg`/`--args`/退出码/`MDKDEBUG_CLI=0`
+> 的端到端断言与三条一致性断言（子命令清单↔parser↔分发表、子命令名不与工具重名）盯着这条。
+
 
 ### 逆向语义层：字符串 / 死代码 / 两镜像差分 / 栈深 / 数据表（批次102）
 

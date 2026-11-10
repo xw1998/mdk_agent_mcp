@@ -29,7 +29,15 @@ import logging  # noqa: E402
 from . import __version__  # noqa: E402
 
 
-def main() -> int:
+def main(argv=None) -> int:
+    # 批次104：工具即 CLI 子命令——第一个位置参数是子命令名（tools/groups/describe/call）
+    # 或工具名时，走命令行直调（`mdkdebug read_mem --arg addr=0x20000000 --arg n=16`）。
+    # 判据与开关都在 toolcli 里：只认**第一个**位置参数，故 `--host 127.0.0.1`、
+    # `--version`、无参启动全部照旧走下面的服务端解析；MDKDEBUG_CLI=0 可整体关掉。
+    _argv = list(sys.argv[1:] if argv is None else argv)
+    from . import toolcli as _toolcli
+    if _toolcli.handles(_argv):
+        return _toolcli.main(_argv)
     parser = argparse.ArgumentParser(
         prog="mdkdebug",
         description="可被 AI 工具调用的 Keil uVision 调试服务（MCP Server）",
@@ -56,7 +64,7 @@ def main() -> int:
                               "如 'myproj:D:/p/out.axf:D:/p/out.map:0x08000000:0x100000'。"
                               "用于在非本机/仓库外工程注入可切换符号，避免写死路径"))
     parser.add_argument("--verbose", action="store_true", help="输出调试日志")
-    args = parser.parse_args()
+    args = parser.parse_args(_argv)
 
     logging.basicConfig(
         level=logging.DEBUG if args.verbose else logging.INFO,
