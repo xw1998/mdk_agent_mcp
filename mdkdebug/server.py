@@ -78,6 +78,10 @@ from . import semantics as _sem
 from . import bindiff as _bindiff
 from . import callgraph as _callgraph
 from . import locate as _locate
+from . import writevar as _writevar   # 批次106：按变量名写的编码与宽度校验
+from . import memdump as _memdump     # 批次106：区间分块转储
+from . import pointmap as _pointmap   # 批次106：Modbus 多次采样点表
+from . import textio as _textio
 
 logger = logging.getLogger("mdkdebug.server")
 
@@ -3031,6 +3035,68 @@ def _read_variable_via_elf(client, name, count=0, read_memory=True, delta=0, dno
                          "结构体/字符串看 memory_hex")
     return out
 
+def _var_target(client, name, delta=0):
+    """变量名 → 链接地址 / 运行地址 / 符号宽度（写回用，批次106）。
+
+    与 read_variable 的差别：写回**必须**知道宽度——写多了会踩到相邻变量，写少了
+    等于什么都没改。所以这里两条轨道都试，且把「宽度从哪来」如实写在 size_source 里：
+
+      1. Keil 表达式 `&name` 取地址、`sizeof(name)` 取宽度；
+      2. 取不到就查 .axf 符号表（static/被优化掉/表达式失败的场景，与 read_variable 的
+         双轨兜底同源）。
+
+    两轨都拿不到地址就抛 ValueError（不猜）；宽度拿不到时 size_bytes=0，
+    由调用方按「值本身 + value_type」决定，并在输出里点明宽度来源未知。
+    """
+    nm = str(name or "").strip()
+    if not nm:
+        raise ValueError("name 为空：要写哪个变量？（如 'g_flow_total'、'arr'）")
+    out = {"name": nm, "link_address": None, "run_address": None,
+           "size_bytes": 0, "size_source": None, "address_source": None}
+    link = None
+    try:
+        ar = client.calc_expression("&" + nm)
+    except Exception:  # noqa: BLE001
+        ar = {}
+    if isinstance(ar, dict) and ar.get("ok") and isinstance(ar.get("value"), int):
+        link = int(ar["value"]) & ~1
+        out["address_source"] = "调试器表达式 &%s" % nm
+    size = 0
+    try:
+        sz = client.calc_expression("sizeof(%s)" % nm)
+    except Exception:  # noqa: BLE001
+        sz = {}
+    if isinstance(sz, dict) and sz.get("ok") and isinstance(sz.get("value"), int):
+        size = int(sz["value"])
+        if size > 0:
+            out["size_source"] = "调试器表达式 sizeof(%s)" % nm
+    if link is None:
+        loc = _get_locator()
+        hit = loc.symbol_addr(nm) if (loc is not None and not any(
+            t in nm for t in (".", "[", "->", " "))) else None
+        if hit:
+            link = int(hit["addr"])
+            out["address_source"] = ".axf 符号表（ELF .symtab）"
+            if not size and int(hit.get("size") or 0) > 0:
+                size = int(hit["size"])
+                out["size_source"] = ".axf 符号表 st_size"
+    if link is None:
+        raise ValueError(
+            "无法解析符号 '%s' 的地址：Keil 表达式与 .axf 符号表都没命中。"
+            "常见原因：符号不存在/被优化掉（static 且未使用）、符号文件不是当前工程的"
+            "（set_symbol_file 切到正确的 .axf）、或当前没进调试态。" % nm)
+    run = (int(link) + int(delta)) & 0xFFFFFFFF if delta else int(link)
+    out.update({"link_address": hex(int(link)), "run_address": hex(run),
+                "address": hex(run), "size_bytes": int(size)})
+    if not size:
+        out["size_source"] = None
+        out["size_note"] = ("没取到符号宽度（sizeof 与 ELF st_size 都不可用）："
+                            "按 value/value_type 决定写几个字节——写数组/结构体请显式给 "
+                            "size_bytes 或 values")
+    if delta:
+        out["reloc_delta"] = "0x%X" % int(delta)
+    return out
+
 def _batch_alias_args(tool: str, args: dict) -> dict:
     """batch 历史别名兼容：addr/address、n_bytes/size 等旧写法仍可用。"""
     a = dict(args or {})
@@ -3620,6 +3686,125 @@ def create_server(host: str = "127.0.0.1", port: int = 4823,
                 out["symbol_stale_warning"] = hint
         return _js(out)
 
+    @server.tool(
+        name="write_variable",
+        title="按变量名写回（类型感知 + 写后回读校验）",
+        description=(
+            "按变量名把一个值写进目标内存——**read_variable 的写入侧配对工具**。"
+            "name 是变量名（支持 'timer.sec'、'arr' 这类表达式）；value 是单值（十进制/0x 十六进制/"
+            "浮点/true|false），数组或批量用 values（'1,2,3,4' 或数组）；count 是元素个数"
+            "（给了就核对 values 的个数，不一致直接报错，不写半截）。\n"
+            "**为什么不用表达式赋值**：`calc_expression(\"x = 1\")` 是否有副作用由 Keil 决定、"
+            "写失败也不会报错，调用方只会看到「算出来一个值」。本工具改成自己算字节 → write_mem → "
+            "回读比对，三个中间结果都摊开（planned_hex / readback_hex / verified）。\n"
+            "**宽度三条来源（优先级从高到低）**：size_bytes（显式）> sizeof(name)（Keil 表达式）> "
+            ".axf 符号表 st_size；都没有时按 value_type/值本身推断并记 size_source=null。"
+            "值编码按小端；value_type 可写 auto/int/uint/u8..u64/i8..i64/float/double/raw"
+            "（raw 传 hex:deadbeef 直接写字节）。\n"
+            "**越界一律拒绝**：值超过符号宽度、元素个数与 count 不符、整数超出类型范围、"
+            "浮点写整数——全部报错并说清怎么改，**不截断、不四舍五入、不静默成功**。"
+            "只写数组前缀时显式传 allow_partial=true。\n"
+            "**dry_run=true 只算不写**（返回将写入的字节与当前值），适合先核对再落手。"
+            "写后默认回读校验（verify=true）：verified=false 说明**写下去了但没生效**——"
+            "常见是变量落在 Flash/.rodata（只读）、目标在跑（先 stop 或用 running=\"halt\"）、"
+            "或有别的实例并发写同一处；不要据此判断「固件把它改回去了」。"
+            "写 App 侧变量（运行期重定位）传 reloc_delta=\"0xF000\" 或先用 set_reloc_delta。"
+            "**本工具会改目标内存**，写入前建议先 read_variable 备份。"
+        ),
+    )
+    async def write_variable(name: str, value: str = "", values: str = "",
+                             count: int = 0, value_type: str = "auto",
+                             size_bytes: int = 0, reloc_delta: str = "",
+                             allow_partial: bool = False, dry_run: bool = False,
+                             verify: bool = True, running: str = "live") -> str:
+        run_mode = str(running or "live").strip().lower()
+        if run_mode not in ("live", "halt"):
+            return _js({"ok": False, "error_code": "invalid-argument",
+                        "error": "running 只支持 live / halt，收到: %s" % running})
+        try:
+            client = _get_client()
+            delta, dnote = _eff_reloc_delta(reloc_delta)
+            tgt = _var_target(client, name, delta)
+            if dnote:
+                tgt["reloc_note"] = dnote
+            width = int(size_bytes or 0) or int(tgt.get("size_bytes") or 0)
+            try:
+                pl = _writevar.plan(value=value, values=(values if values != "" else None),
+                                    width=width, value_type=value_type,
+                                    allow_partial=bool(allow_partial), count=int(count or 0))
+            except ValueError as e:
+                out = dict(tgt)
+                out.update({"ok": False, "error_code": "invalid-argument",
+                            "error": str(e)})
+                return _js(out)
+            run = int(tgt["run_address"], 16)
+            payload = pl["payload"]
+            out = dict(tgt)
+            out.update({"ok": True, "size_bytes": (width or len(payload)),
+                        "element_size": pl["elem_size"], "count": pl["count"],
+                        "value_type": pl["type"], "planned_hex": payload.hex()})
+            if pl.get("notes"):
+                out["notes"] = pl["notes"]
+            # 写前值（只读，用于对照；读不到不影响写，如实标 none）
+            try:
+                rb = client.read_mem(run, len(payload))
+                if rb.get("ok"):
+                    before = bytes.fromhex(rb.get("data_hex") or "")
+                    if before:
+                        out["before"] = _writevar.format_value(before, pl["type"])
+            except Exception:  # noqa: BLE001
+                pass
+            if dry_run:
+                out["dry_run"] = True
+                out["note"] = "dry_run=true：只算了字节，**没有写目标**"
+                return _js(out)
+            halt_info = None
+            t0 = time.time()
+            if run_mode == "halt":
+                halt_info = _halt_guard(client)
+            try:
+                wr = dict(client.write_mem(run, payload))
+                out["ok"] = bool(wr.get("ok"))
+                out["write_status"] = {k: wr.get(k) for k in
+                                       ("ok", "written", "status", "status_text")
+                                       if k in wr}
+                if not out["ok"]:
+                    out["error"] = (wr.get("error") or wr.get("status_text")
+                                    or "write_mem 未成功")
+                elif verify:
+                    out.update(_verify_write(client, run, payload))
+                    if out.get("verified"):
+                        try:
+                            after = client.read_mem(run, len(payload))
+                            if after.get("ok"):
+                                ab = bytes.fromhex(after.get("data_hex") or "")
+                                if ab:
+                                    out["after"] = _writevar.format_value(ab, pl["type"])
+                        except Exception:  # noqa: BLE001
+                            pass
+                    else:
+                        out["warning"] = (
+                            "写入已发出但**回读不一致**（写入没落地）。常见原因："
+                            "① 变量在 Flash/.rodata，运行期不可写（值只能由烧录改变）；"
+                            "② 目标在运行，另一处代码又把它改回去了（先 stop 或 running=\"halt\"）；"
+                            "③ 有别的 mdkdebug 实例并发写同一处。")
+            finally:
+                if halt_info is not None:
+                    paused_ms = int((time.time() - t0) * 1000)
+                    _resume_after_halt(client, halt_info)
+                    out["sampling"] = "halt" if halt_info.get("stop_ok") else "halt_failed"
+                    out["was_running"] = halt_info.get("was_running")
+                    out["paused_ms"] = paused_ms
+                    if halt_info.get("was_running"):
+                        out["resumed"] = halt_info.get("resumed")
+            return _js(out)
+        except Exception as e:  # noqa: BLE001
+            out = {"ok": False, "name": str(name), "error": str(e)}
+            hint = _symbol_stale_hint(None)
+            if hint:
+                out["symbol_stale_warning"] = hint
+            return _js(out)
+
     # ---------------- 内存读写 ----------------
     @server.tool(
         name="read_mem",
@@ -3770,6 +3955,60 @@ def create_server(host: str = "127.0.0.1", port: int = 4823,
             return _js(out)
         except Exception as e:  # noqa: BLE001
             return _js({"ok": False, "addr": str(addr), "error": str(e)})
+
+    @server.tool(
+        name="dump_memory",
+        title="内存区间转储成文件（bin / Intel HEX / hexdump，可分块续传）",
+        description=(
+            "把 [addr, addr+size) 这段内存**读成文件**，而不是把几十 KB 十六进制塞回上下文。"
+            "为什么要它：read_mem 一次只能搬一块，读 64 KB 要几十次往返；而且中间某块失败时"
+            "没有任何交代，人会以为「整段都读回来了」。\n"
+            "format：**bin**（原始字节，默认）/ **ihex**（Intel HEX，带扩展线性地址、记录不跨 64 KB、"
+            "末尾 EOF）/ **hexdump**（人读的地址+十六进制+ASCII）。\n"
+            "addr 支持十六进制/十进制/**符号名**（自动查 .axf 符号表）；App 侧符号可传 reloc_delta。\n"
+            "**读不全不假装**：某块读失败或读回不足时，按 gap_fill（默认 0xFF，可设 0）补齐并记进 "
+            "gaps（含地址、偏移、长度、原因），同时 complete=false 且给 warning——"
+            "补齐的字节**不是目标真实内容**，比对时必须先看 gaps。\n"
+            "**resume=true** 依据已有 bin 文件的长度从断点续传（大 RAM/外部 Flash 常读一半断线）；"
+            "ihex/hexdump 是文本，文件长度不等于已读字节数，因此拒绝对它们续传。"
+            "已有同名文件时默认拒绝覆盖（overwrite=true 才覆盖），避免把上一份证据冲掉。\n"
+            "返回 path / written_bytes / complete / gaps / sha256（本次写入的字节，含补齐）/ "
+            "throughput_kbps / file_size——两份 dump 比对就用 sha256 与 gaps。\n"
+            "注意：目标运行中也能读，但这段时间内存可能在变（不是一致快照）；要一致快照先 stop。"
+            "单次上限 8 MB（防止手误把整片地址空间拉下来），更大请分段。"
+        ),
+    )
+    async def dump_memory(addr: str | int, size: int = 0, path: str = "",
+                          format: str = "bin", chunk: int = 4096,
+                          resume: bool = False, overwrite: bool = False,
+                          gap_fill: int = 255, reloc_delta: str = "") -> str:
+        try:
+            client = _get_client()
+            delta, dnote = _eff_reloc_delta(reloc_delta)
+            a, note = _resolve_addr_with_reloc(_addr_arg(addr), client, delta)
+
+            def _read(at, n):
+                r = client.read_mem(at, n)
+                if not r.get("ok"):
+                    raise RuntimeError(r.get("status_text") or
+                                       ("读内存失败 status=%s" % r.get("status")))
+                d = bytes.fromhex(r.get("data_hex") or "")
+                if not d:
+                    raise RuntimeError("读回空数据")
+                return d
+
+            out = _memdump.dump(_read, a, int(size or 0), str(path or ""),
+                                fmt=format, chunk=int(chunk or 4096),
+                                resume=bool(resume), overwrite=bool(overwrite),
+                                fill=int(gap_fill if gap_fill is not None else 255))
+            if note:
+                out["addr_note"] = note
+            if dnote:
+                out["reloc_note"] = dnote
+            return _js(out)
+        except Exception as e:  # noqa: BLE001
+            return _js({"ok": False, "error": str(e), "addr": str(addr),
+                        "path": str(path or "")})
 
     # ---------------- 调试会话控制 ----------------
     @server.tool(
@@ -10021,6 +10260,88 @@ def create_server(host: str = "127.0.0.1", port: int = 4823,
                                "②A/B 线是否交叉、GND 是否共地、终端电阻 ③从站号是否真的在这个范围里"
                                "（不确定就放大 slaves，但注意耗时）④总线是否有别的程序占着")
             return _js(out)
+        except ValueError as e:
+            return _js({"ok": False, "error": str(e), "error_code": "invalid-argument"})
+        except Exception as e:  # noqa: BLE001
+            return _js({"ok": False, "error": str(e)})
+
+    @server.tool(
+        name="modbus_pointmap",
+        title="Modbus 点表探测（多次采样分清 常量/状态位/会变/无应答）",
+        description=(
+            "从 addr 起连读 count 个点、**重复采样 samples 次**（间隔 interval_ms），"
+            "然后按「这些值怎么变」给每个点分类，回答单次 modbus_read 回答不了的问题："
+            "哪些是固定参数、哪些是实时量、哪些是 0/1 状态位、哪些地址从站根本没实现。\n"
+            "func 决定对象：01 线圈 / 02 离散输入 / 03 保持寄存器（默认）/ 04 输入寄存器；"
+            "线圈与离散输入按位返回，每个地址是一个 0/1 点。\n"
+            "分类：**constant**（全程一个值，像配置/量程/版本）/ **bistable**（只在 0/1 跳，"
+            "像状态位）/ **drifting**（跨采样单调变化，像温度/液位/计数）/ **changing**"
+            "（无规律变化，可能是噪声或 32 位量的高低字）/ **no_response**（这几次全无应答，"
+            "**不等于值是 0**）。\n"
+            "返回每点的 address/ref（4xxxx/3xxxx/0xxxx/1xxxx 引用号，**只是惯例标注**）、"
+            "value/min/max/span/distinct/changes/history，以及仅含常量点的 point_table"
+            "（可直接当点表初稿）。语义不由本工具判定：每条都带 semantic_source=\"unconfirmed\"，"
+            "真正的含义要按设备手册确认。\n"
+            "采样失败（超时/异常帧/越界）记为 None 并计入 sample_errors，不当 0 处理。"
+            "给 out 就把整份结果写成 JSON 文件（UTF-8 无 BOM），便于跨次比对。"
+            "串口参数与 modbus_read 相同：首次必须给 port；端口独占，若 serial_monitor 正在监听会明确报错。\n"
+            "耗时约 samples × interval_ms；总点数默认上限 max_count=256。这是**只读**探测，"
+            "不会写从站（但会占用串口并往总线发请求）。"
+        ),
+    )
+    async def modbus_pointmap(slave: int = 1, func: int = 3, addr: int = 0,
+                              count: int = 16, samples: int = 8,
+                              interval_ms: int = 200, port: str = "",
+                              baud: int = 9600, serial_format: str = "",
+                              databits: int = 8, parity: str = "none",
+                              stopbits: float = 1, mode: str = "rtu",
+                              timeout_ms: int = 1000, include_history: bool = True,
+                              max_count: int = 256, out: str = "") -> str:
+        try:
+            cnt = int(count or 0)
+            if cnt <= 0:
+                return _js({"ok": False, "error_code": "invalid-argument",
+                            "error": "count 必须是正整数（要探测多少个点）"})
+            if cnt > int(max_count or 256):
+                return _js({"ok": False, "error_code": "invalid-argument",
+                            "error": "本次要探测 %d 个点，超过上限 max_count=%d"
+                                     % (cnt, int(max_count or 256)),
+                            "hint": "收窄 count（如 16/32），或分批探测不同 addr 段"})
+            sess, err = await _modbus_ready(port, baud, databits, parity, stopbits,
+                                            mode, timeout_ms, serial_format)
+            if err:
+                return _js(err)
+            to = max(0.02, float(timeout_ms or 1000) / 1000.0)
+
+            def _sampler(sid, f, a, c):
+                req = _modbus.make_request(sess.mode, sid, f, addr=a, count=c)
+                res = sess.transact(req["request"], timeout_s=to,
+                                    expected_len=req["expected_len"])
+                if not res.get("ok"):
+                    raise RuntimeError(res.get("error") or "无应答")
+                p = res.get("response_parsed") or {}
+                if p.get("is_exception"):
+                    raise RuntimeError("从站异常 0x%02X（%s）"
+                                       % (int(p.get("exception_code") or 0),
+                                          p.get("exception_text") or "未译"))
+                dec = res.get("response") or {}
+                if dec.get("kind") == "registers":
+                    return list(dec.get("registers") or [])
+                if dec.get("kind") == "bits":
+                    return list(dec.get("bits") or [])
+                raise RuntimeError("应答里的值解不出来（kind=%r）" % dec.get("kind"))
+
+            result = _pointmap.run(_sampler, int(slave), int(func), int(addr), cnt,
+                                   samples=int(samples or 8),
+                                   interval_ms=int(interval_ms or 0),
+                                   include_history=bool(include_history))
+            result["port"] = sess.port
+            result["mode"] = sess.mode
+            if out and str(out).strip():
+                p = str(out).strip()
+                _textio.write_text(p, json.dumps(result, ensure_ascii=False, indent=2))
+                result["written_to"] = os.path.abspath(p)
+            return _js(result)
         except ValueError as e:
             return _js({"ok": False, "error": str(e), "error_code": "invalid-argument"})
         except Exception as e:  # noqa: BLE001

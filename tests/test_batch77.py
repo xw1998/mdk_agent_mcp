@@ -263,8 +263,8 @@ def section_d():
 
     all_n = len(asyncio.run(SV.create_server(port=PORT, toolsets="all").list_tools()))
     core_n = len(asyncio.run(SV.create_server(port=PORT, toolsets="core").list_tools()))
-    check("D4 注册总数 222", all_n == 222, all_n)
-    check("D5 默认面仍 44（两个新工具不在默认面）", core_n == 44, core_n)
+    check("D4 注册总数 225", all_n == 225, all_n)
+    check("D5 默认面仍 45（两个新工具不在默认面）", core_n == 45, core_n)
 
     a_pre = AN.annotations_for("firmware_precheck")
     check("D6 firmware_precheck 标为只读",

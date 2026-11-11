@@ -32,6 +32,15 @@ _SPEC = {
     "read_registers": {"names": ["regs", "reg", "registers", "only", "filter"]},
     "read_variable": {"name": _LOCATE + ["arr", "varname"],
                       "count": ["n", "num", "items", "length"]},
+    # 批次106：写入侧。value/values 的别名刻意分开——「单值」与「多值」混淆
+    # 会写成半个数组，比报错更难查。
+    "write_variable": {"name": _LOCATE + ["varname"],
+                       "value": ["val"],
+                       "values": ["vals"],
+                       "count": ["n", "items", "length"]},
+    "dump_memory": {"addr": _ADDRESS,
+                    "size": ["n_bytes", "length", "len", "bytes"],
+                    "path": ["out", "output", "file", "filepath", "out_path"]},
     "read_struct": {"name": _LOCATE + ["struct", "type"],
                     "max_fields": ["max", "limit", "fields", "max_count"]},
     "watch": {"expressions": _NAMES + ["expr_list", "list"],

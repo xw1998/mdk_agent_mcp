@@ -16,7 +16,7 @@
   A 默认档：组数是现取的（12），旧错口径「11 个组」不再出现
   B full 档：枚举覆盖每一个组（含此前漏掉的 code）
   C group_catalog() 自身：覆盖全组、不多不少、每项「组名 标签」
-  D 不变量：注册 200 / 默认面 44 / core 38 / trace 38（防止顺手改坏）
+  D 不变量：注册 200 / 默认面 45 / core 39 / trace 38（防止顺手改坏）
 
 运行：python -m tests.test_batch76
 """
@@ -84,9 +84,9 @@ def section_d():
     print("D. 工具面不变量")
     all_n = len(asyncio.run(SV.create_server(port=PORT, toolsets="all").list_tools()))
     core_n = len(asyncio.run(SV.create_server(port=PORT, toolsets="core").list_tools()))
-    check("D1 注册总数 222", all_n == 222, all_n)
-    check("D2 默认面 44（core 38 + 6 个永远保留的入口）", core_n == 44, core_n)
-    check("D3 core 组 38", len(TB.TOOLSETS["core"]) == 38, len(TB.TOOLSETS["core"]))
+    check("D1 注册总数 225", all_n == 225, all_n)
+    check("D2 默认面 45（core 39 + 6 个永远保留的入口）", core_n == 45, core_n)
+    check("D3 core 组 38", len(TB.TOOLSETS["core"]) == 39, len(TB.TOOLSETS["core"]))
     check("D4 trace 组 38", len(TB.TOOLSETS["trace"]) == 38, len(TB.TOOLSETS["trace"]))
 
 # ------------------------------------------------------------------

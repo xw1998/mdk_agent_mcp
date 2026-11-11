@@ -132,6 +132,8 @@ DESTRUCTIVE = {
     # 闭环入口（批次77）：内部会编译并烧录，属不可逆那一档。
     "build_flash_verify",
     "fill_mem", "write_peripheral", "close_uvision", "restart_keil",
+    # 批次106：按变量名写目标内存，与 write_mem 同档（改了就回不去）。
+    "write_variable",
     "reset", "set_breakpoint", "clear_all_breakpoints", "write_mem",
     "batch_debug_script",
     # 非 MDK 侧：写目标 Flash/RAM、覆盖用户工程里的插桩文件
@@ -168,6 +170,11 @@ NON_IDEMPOTENT = {
     # 渲染默认每次生成一个带时间戳的新文件（重复调用会攒出多个页面），
     # 因此不是幂等——与 session_state 同口径。
     "view_render",
+    # 批次106：转储要写文件——同名文件默认拒绝、resume 依据文件长度续传，
+    # 重跑一次并不等价于只跑一次。
+    "dump_memory",
+    # 点表探测器给 out 会写 JSON；而且「再采 8 次」与「采 8 次」本身不等价。
+    "modbus_pointmap",
     "scatter_edit", "core_select",
     "restart_keil", "reset_connection", "trace_swo_start", "trace_swo_stop",
     "trace_profile", "profile_function", "profile_sampling",
@@ -215,6 +222,8 @@ MUTATING = {
     "uvprojx_edit", "project_file_repair", "wait_fault",
     "scatter_edit", "core_select",
     "watchdog_freeze", "write_mem", "write_peripheral",
+    # 批次106：写变量改目标内存；转储写本地文件；点表探测占串口并发请求。
+    "write_variable", "dump_memory", "modbus_pointmap",
     # 批次49：函数运行时线录制会下/撤硬件断点并 halt/resume 目标；
     # D-Cache 维护会写 SCB 的 DCCMVAC/DCIMVAC（不改用户数据，但确实写目标状态）。
     "trace_record", "dcache_maintain",

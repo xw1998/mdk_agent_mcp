@@ -92,8 +92,8 @@ def section_a():
     print("A. 刀一·wire 结构瘦身（默认开）")
     srv = fresh()
     ws = wire(srv)
-    check("A1 wire 上没有 outputSchema（44 个全去）",
-          len(ws) == 44 and all(getattr(t, "output_schema", None) is None
+    check("A1 wire 上没有 outputSchema（45 个全去）",
+          len(ws) == 45 and all(getattr(t, "output_schema", None) is None
                                 for t in ws), len(ws))
     check("A2 wire 上 inputSchema 里 title 归零",
           all(SF.count_titles(getattr(t, "input_schema", None) or {}) == 0
@@ -103,7 +103,7 @@ def section_a():
     have_out = [nm for nm, t in live.items()
                 if getattr(t, "output_schema", None) is not None]
     check("A3 活注册对象的 output_schema 未被动过（调用路径不改形态）",
-          len(have_out) == 44, len(have_out))
+          len(have_out) == 45, len(have_out))
     live_titles = sum(SF.count_titles(t.parameters or {})
                       for t in live.values())
     check("A4 活注册对象的 inputSchema（含 title）未被动过",
@@ -111,7 +111,7 @@ def section_a():
 
     st = call_sync(srv, "toolset", {"action": "status"})
     check("A5 瘦身后调用照常返回（信封 ok / 结构化返回仍在）",
-          st.get("status") == "ok" and st.get("exposed") == 44, st)
+          st.get("status") == "ok" and st.get("exposed") == 45, st)
     ws2 = wire(srv)
     check("A6 wire 副本每次新造（改它不累积污染活对象）",
           all(getattr(t, "output_schema", None) is None for t in ws2))
@@ -131,8 +131,8 @@ def section_b():
         if saved is not None:
             os.environ[SF.ENV_SWITCH] = saved
     # off：字段齐全
-    check("B2 off 时 outputSchema 保留（44 个全在）",
-          len(ws_off) == 44
+    check("B2 off 时 outputSchema 保留（45 个全在）",
+          len(ws_off) == 45
           and all(w.get("outputSchema") for w in ws_off),
           sum(1 for w in ws_off if w.get("outputSchema")))
     check("B3 off 时 inputSchema 里 title 保留（>0）",

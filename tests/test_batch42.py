@@ -67,7 +67,7 @@ def group_ab():
     os.environ.pop("MDKDEBUG_TOOLSETS", None)
     srv = create_server(port=PORT_A, toolsets=None)
     ns = names(srv)
-    check("A1 默认只暴露 44 个（core 38 + 常驻 6）", len(ns) == 44, len(ns))
+    check("A1 默认只暴露 45 个（core 39 + 常驻 6）", len(ns) == 45, len(ns))
     for t in ("enter_debug", "read_mem", "write_mem", "mdk_guide", "session_state",
               "keil_health", "diagnose", "target_info") + tuple(STAY):
         check("A2 默认含 %s" % t, t in ns, "")
@@ -77,53 +77,54 @@ def group_ab():
         check("A3 默认不含未装载组的 %s" % t, t not in ns, "")
 
     st = call_sync(srv, "toolset", {"action": "status"})
-    check("A4 status 自述一致（core 已装载 / 收起 178 / 注册 222 / 来源 default）",
+    check("A4 status 自述一致（core 已装载 / 收起 180 / 注册 225 / 来源 default）",
           st.get("ok") and st.get("loaded_groups") == ["core"]
-          and st.get("hidden") == 178 and st.get("total_registered") == 222
+          and st.get("hidden") == 180 and st.get("total_registered") == 225
           and st.get("source") == "default", {k: st.get(k) for k in
                                               ("loaded_groups", "hidden", "total_registered", "source")})
     g = st.get("groups") or {}
     check("A5 status 列全 12 个组且各组规模正确",
-          len(g) == 12 and g.get("core", {}).get("size") == 38
+          len(g) == 12 and g.get("core", {}).get("size") == 39
           and g.get("trace", {}).get("size") == 38 and g.get("ocd", {}).get("size") == 17
           and g.get("target", {}).get("size") == 7
           and g.get("rtos", {}).get("size") == 3
-          and g.get("serial", {}).get("size") == 14, {k: v.get("size") for k, v in g.items()})
-    check("A6 status 给出隐藏工具清单与装回来的办法（178 个）",
-          len(st.get("hidden_tools") or []) == 178 and "toolset" in (st.get("hint") or ""), "")
+          and g.get("mem", {}).get("size") == 12
+          and g.get("serial", {}).get("size") == 15, {k: v.get("size") for k, v in g.items()})
+    check("A6 status 给出隐藏工具清单与装回来的办法（180 个）",
+          len(st.get("hidden_tools") or []) == 180 and "toolset" in (st.get("hint") or ""), "")
 
     cap = call_sync(srv, "capabilities", {})
     su = cap.get("tool_surface") or {}
     check("A7 capabilities 如实报注册总数 / 收起数 / 未装载组",
-          su.get("registered_total") == 222 and su.get("hidden") == 178
+          su.get("registered_total") == 225 and su.get("hidden") == 180
           and su.get("loaded_groups") == ["core"]
           and "trace" in (su.get("not_loaded_groups") or []), su)
     lt = call_sync(srv, "list_tools", {})
-    check("A8 list_tools 只列当前暴露的（total=44）", lt.get("total") == 44, lt.get("total"))
+    check("A8 list_tools 只列当前暴露的（total=45）", lt.get("total") == 45, lt.get("total"))
 
     print("B. 运行期装卸")
     r = call_sync(srv, "toolset", {"action": "load", "toolsets": "mem,rtos"})
-    check("B1 load mem,rtos 装回 14 个、暴露数 58",
-          r.get("ok") and len(r.get("loaded") or []) == 14 and r.get("exposed") == 58, r)
+    check("B1 load mem,rtos 装回 15 个、暴露数 60",
+          r.get("ok") and len(r.get("loaded") or []) == 15 and r.get("exposed") == 60, r)
     ns2 = names(srv)
     check("B2 装回后立即可见（read_struct / rtos_tasks）",
           "read_struct" in ns2 and "rtos_tasks" in ns2, "")
     lt2 = call_sync(srv, "list_tools", {"keyword": "rtos"})
     got3 = set(t["tool"] for t in (lt2.get("tools") or []))
-    check("B3 list_tools 立即可按新工具过滤（三个 rtos 工具都命中，面仍是 58）",
-          lt2.get("total") == 58
+    check("B3 list_tools 立即可按新工具过滤（三个 rtos 工具都命中，面仍是 60）",
+          lt2.get("total") == 60
           and {"rtos_info", "rtos_tasks", "rtos_objects"} <= got3, sorted(got3))
 
     r2 = call_sync(srv, "toolset", {"action": "load", "toolsets": "mem"})
-    check("B4 重复装载幂等（loaded 空 / already_loaded 11 个）",
-          r2.get("ok") and not (r2.get("loaded") or []) and len(r2.get("already_loaded") or []) == 11, r2)
+    check("B4 重复装载幂等（loaded 空 / already_loaded 12 个）",
+          r2.get("ok") and not (r2.get("loaded") or []) and len(r2.get("already_loaded") or []) == 12, r2)
 
     r3 = call_sync(srv, "toolset", {"action": "unload", "toolsets": "mem,rtos"})
-    check("B5 unload 还原到 44", r3.get("ok") and r3.get("exposed") == 44
-          and len(r3.get("unloaded") or []) == 14, r3)
+    check("B5 unload 还原到 45", r3.get("ok") and r3.get("exposed") == 45
+          and len(r3.get("unloaded") or []) == 15, r3)
 
     r4 = call_sync(srv, "toolset", {"action": "load", "toolsets": "all"})
-    check("B6 toolsets=all 一次全装到 222", r4.get("ok") and r4.get("exposed") == 222, r4)
+    check("B6 toolsets=all 一次全装到 225", r4.get("ok") and r4.get("exposed") == 225, r4)
     srv_all = create_server(port=PORT_B, toolsets="all")
     check("B7 装卸若干轮后，工具顺序仍与全量面完全一致（不把工具甩到队尾）",
           order(srv) == order(srv_all), "本地 %d / 全量 %d" % (len(order(srv)), len(order(srv_all))))
@@ -139,7 +140,7 @@ def group_ab():
     check("B11 卸载常驻组（core）不会把常驻入口一起收走",
           r6.get("ok") and set(names(srv)) == STAY, names(srv))
     call_sync(srv, "toolset", {"action": "load", "toolsets": "core"})
-    check("B12 装回 core 后回到 44", len(names(srv)) == 44, len(names(srv)))
+    check("B12 装回 core 后回到 45", len(names(srv)) == 45, len(names(srv)))
     return srv, srv_all
 
 # ======================================================================
@@ -165,19 +166,19 @@ def _run(code, env):
 def group_c():
     print("C. 显式配置")
     base = {k: v for k, v in os.environ.items() if k != "MDKDEBUG_TOOLSETS"}
-    for spec, want, label in (("all", "222", "MDKDEBUG_TOOLSETS=all 仍是全开"),
-                              ("serial", "20", "=serial 只留 14 串口 + 6 常驻"),
-                              ("core,mem", "55", "=core,mem 组合生效"),
-                              ("bogus", "222", "=bogus 组名认不出 → 不裁剪（宁可少裁不错杀）")):
+    for spec, want, label in (("all", "225", "MDKDEBUG_TOOLSETS=all 仍是全开"),
+                              ("serial", "21", "=serial 只留 15 串口 + 6 常驻"),
+                              ("core,mem", "57", "=core,mem 组合生效"),
+                              ("bogus", "225", "=bogus 组名认不出 → 不裁剪（宁可少裁不错杀）")):
         got, _ = _run(CODE, dict(base, MDKDEBUG_TOOLSETS=spec))
         check("C1 %s（期望 %s）" % (label, want), got.endswith(want), got)
     got, allout = _run(CODE, base)
-    check("C2 不设环境变量 → 默认精简 44", got.endswith("44"), got)
+    check("C2 不设环境变量 → 默认精简 45", got.endswith("45"), got)
     got, allout = _run(CODE, dict(base, MDKDEBUG_TOOLSETS="bogus"))
     check("C3 组名认不出时有告警（不静默）", "未知组名" in allout, allout[-300:])
     got, _ = _run(CODE_ARG, dict(base, MDKDEBUG_TOOLSETS="all"))
-    check("C4 create_server(toolsets=) 参数优先于环境变量（all + serial → 20）",
-          got.endswith("20"), got)
+    check("C4 create_server(toolsets=) 参数优先于环境变量（all + serial → 21）",
+          got.endswith("21"), got)
     got, _ = _run(CODE_SRC, dict(base, MDKDEBUG_TOOLSETS="all"))
     check("C5 显式参数时来源如实报 param（不误报 default）", "SRC param" in got, got)
 
@@ -205,7 +206,7 @@ def group_d(srv_all):
           "toolset" in AN.MUTATING and "toolset" not in AN.READONLY
           and "toolset" not in AN.DESTRUCTIVE, "")
     bad = AN.check_surface(full)
-    check("D8 annotate.check_surface 在 222 个工具上无问题", not bad, bad)
+    check("D8 annotate.check_surface 在 225 个工具上无问题", not bad, bad)
 
 # ======================================================================
 # E. 失败归类

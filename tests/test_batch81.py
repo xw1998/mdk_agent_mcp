@@ -232,8 +232,8 @@ def section_e():
     from mdkdebug import server as SV
     tools = asyncio.run(SV.create_server(port=15881, toolsets="all").list_tools())
     names = {t.name for t in tools}
-    check("E1 工具总数 222（本批次不加工具；+1 来自批次86 recover_diff）",
-          len(names) == 222, len(names))
+    check("E1 工具总数 225（本批次不加工具；+1 来自批次86 recover_diff）",
+          len(names) == 225, len(names))
     check("E2 没有引入 Ghidra 相关工具",
           not any("ghidra" in n.lower() for n in names),
           [n for n in names if "ghidra" in n.lower()])

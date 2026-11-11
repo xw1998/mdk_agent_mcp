@@ -239,7 +239,7 @@ mdk_agent/
 ├── requirements.txt          # Python 依赖
 ├── README.md
 ├── mdkdebug/
-│   ├── __init__.py           # 包初始化（版本号 0.2.29）
+│   ├── __init__.py           # 包初始化（版本号 0.2.30）
 │   ├── cli.py                # 命令行入口（main，mdkdebug 命令）
 │   ├── uvsock.py             # UVSOCK 协议：命令码、VSET/AMEM/EXECCMD 打包与解析
 │   ├── interface.py          # TCP 物理接口层（含异步消息残留清理）
@@ -256,7 +256,7 @@ mdk_agent/
 │   ├── linkio.py             # 链路原语层：把「读/写内存、读核寄存器、停/走」从 Keil(UVSOCK) 与 OpenOCD 里抽出来
 │   ├── traceproto.py         # trace 协议：ITM 解码、MTF 帧格式与 CRC8
 │   ├── trace.py              # trace：SWO / RTT（主机侧自研）/ SWD 采样 / DWT / 插桩组件部署（观测类工具两条链路通用）
-│   └── server.py             # MCP Server 与 222 个工具定义
+│   └── server.py             # MCP Server 与 225 个工具定义
 ├── components/
 │   └── trace/                # 目标侧插桩组件（ITM / RTT / UART / BUFF 四后端，只依赖 CMSIS）
 │                             #   mdk_trace.[ch] / mdk_trace_rtt.[ch] / config 默认头 / CMakeLists / README
@@ -350,7 +350,7 @@ mdkdebug read_mem --arg addr=0x20000000 --arg n=16     # 省略 call 的简写
 
 ## 暴露的 MCP 工具
 
-共 **222** 个（**默认只暴露 44 个**，其余按需装载，见[工具面](#工具面默认精简--按需装载)），分两大块：
+共 **225** 个（**默认只暴露 45 个**，其余按需装载，见[工具面](#工具面默认精简--按需装载)），分两大块：
 
 - **MDK 族（134 个）**——调试读写 / 断点与命中等待 / 外设与内存 / 符号定位 / 工程分析 / **编译·清理·烧录** / **UV4 命令行批处理调试** / **CMSIS-SVD 解码** / **工程文件与分散加载文件(.sct)受控编辑** / **复位循环识别** / Keil 生命周期管理 / **宿主机串口日志与命令应答 · Modbus 主站（RTU/ASCII + 裸帧）** / **看门狗冻结与 Cache 感知** / 环境自检引导（下表）。
 - **非 MDK 族（82 个）**——**工具链**（gcc/make/cmake 探测与调用、构建、ELF/size/objcopy、编译错误解析，10 个）/ **目标档案与多核**（接口·速度·SWO·RTT 参数档案与自动识别、工程现场配置发现、多核目标的核列举与切换，7 个）/ **OpenOCD**（会话·内存·寄存器·断点·烧录，17 个）/ **trace 与覆盖率**（SWO·RTT·采样剖析·DWT·非侵入式 scope·插桩组件部署·**代码覆盖率**·**ETM 能力探测**·**函数运行时线录制**·**目标侧缓冲后端**·**SWD 无缝流后端**·**任务表取名**，38 个）/ **RTOS 任务感知**（任务列表·栈水位·队列信号量，3 个）/ **C 代码索引**（建/同步索引·符号检索·单符号源码体·文件清单·调用关系与影响面，7 个）——不依赖 Keil，同样能在 RISC-V / ESP32 等非 MDK 芯片上工作（见[非 MDK 芯片与 trace](#非-mdk-芯片与-trace不依赖-keil)）。
@@ -365,8 +365,10 @@ mdkdebug read_mem --arg addr=0x20000000 --arg n=16     # 省略 call 的简写
 | `get_status` | 查询是否处于调试、目标是否运行、状态码，并附**当前符号文件路径 + 时间戳**（`symbol_file`/`symbol_mtime_text`）、**符号陈旧判定**（`symbol_stale` + `symbol_stale_warning`：编译/烧录后旧会话符号过期，求值会报 status 13）、**串行化与并发视图**（`serialization`，含其他 mdkdebug 实例清点） | — |
 | `calc_expression` | 计算并读取表达式 / 变量值 | `expr` |
 | `read_variable` | 按变量名查地址/值/大小，支持数组逐元素与整块内存；App 侧重定位场景可配 `reloc_delta` 自动换算运行地址 | `name`、`count?`、`reloc_delta?` |
+| `write_variable` | **按变量名写回**（`read_variable` 的写入侧）：单值/数组、类型感知（auto/int/uint/u8..u64/i8..i64/float/double/raw）、宽度三条来源（`size_bytes` > `sizeof(name)` > `.axf` `st_size`）；**越界一律拒绝**（值超宽、元素数与 `count` 不符、整数超范围、浮点写整数都报错，不截断/不四舍五入/不静默成功）。`dry_run=true` 只算不写；写后默认回读校验，`verified=false` 即「写下去了没生效」，并点明 Flash/.rodata、目标在跑、并发写三种根因。**不走表达式赋值**——那既不能确认有无副作用，失败也不报错 | `name`、`value?`、`values?`、`count?`、`value_type?`、`size_bytes?`、`reloc_delta?`、`allow_partial?`、`dry_run?`、`verify?`、`running?` |
 | `read_mem` | 读取目标内存（`n_bytes` 可写作别名 `length`；`reloc_delta` 用于 App 侧重定位后按运行地址读）。**脏读防护**（`verify`，默认 `auto`）：stop 后紧跟的首次读可能整帧返 0（真机实测 0x08022000 读出 16 个 `00`，重读即正确）——`auto` 在「首帧整帧退化（全 `0x00`/全 `0xFF`）或距最近一次 stop 不足 1 秒」时自动复读、**连续两次一致才采纳**，并返回 `read_confidence`/`reread_count`/`reread_consistent`/`degenerate`/`since_stop_s`；首帧是脏值时用 `first_read_hex` 留证。`verify=true` 强制确认、`false` 关闭（**布尔/字符串都收**，`verify=false` 与 `"false"` 等价）；Flash 区稳定读出全 `0xFF` 判为**已擦除的预期内容**（`content_note`，不降置信度）。**D-Cache 感知**：读 SRAM 且目标 D-Cache 已使能时附 `cache` 字段，提醒「DAP 直读可能拿到内存旧值（CPU 新值还在脏行里）」。**运行态读写**（`running`，默认 `live`）：目标全速跑时读内存**实测可行**，不再要求先停——`live` 直接读并附 `while_running`（读取期间目标是否在跑）；`running="halt"` 做**停-读-走**快照（自动 stop → 读 → run，返回 `sampling`/`was_running`/`paused_ms`/`resumed`/`halt_note`，恢复失败会告警），会打断目标、有副作用，须显式要求 | `addr`（`0x…` 或十进制）、`n_bytes`、`reloc_delta?`、`verify?`（默认 `auto`，可传布尔）、`running?`（`live`/`halt`，默认 `live`） |
 | `write_mem` | 写入目标内存，**默认写后回读校验**（`verify=true` → `verified`/`readback_hex`）：写入被静默忽略（目标运行中/只读区/另一实例并发写）时给出 `verified=false` 与原因，不再「看着成功其实没写进去」。**D-Cache 感知**：写 SRAM 且目标 D-Cache 已使能时附 `cache` 字段，提醒「写下的值可能稍后被脏行回写覆盖（写入仍报成功）」。**运行态写入**（`running`，默认 `live`）：`running="halt"` 用停-写-校验-走，避免写下的值立刻被 CPU 覆盖（同样返回 `paused_ms`/`resumed`/`halt_note`） | `addr`、`data_hex`（十六进制串，可带空格）、`verify?`（默认 true）、`running?`（`live`/`halt`，默认 `live`） |
+| `dump_memory` | **区间转储成文件**（bin / Intel HEX / hexdump）：分块搬运，某块读失败按 `gap_fill`（默认 `0xFF`）补齐并记进 `gaps` + `complete=false`——**补齐的字节不是目标真实内容**；`resume=true` 按已有 bin 的长度续传（ihex/hexdump 拒绝续传，文本长度不等于已读字节数）；同名文件默认拒绝覆盖；返回 `sha256`/`throughput_kbps`/`file_size` 供两次 dump 比对。单次上限 8 MB | `addr`、`size`、`path`、`format?`、`chunk?`、`resume?`、`overwrite?`、`gap_fill?`、`reloc_delta?` |
 | `cache_info` | 读 `SCB->CCR` 判定目标是否使能 D-Cache / I-Cache（并粗略解析 CCSIDR 得到行/路/组与容量）。**为什么重要**：D-Cache 开着时 DAP **直读 RAM 可能是陈旧值**、**直写 RAM 可能被脏行回写覆盖**，两者都不报错——`read_mem`/`write_mem` 命中 SRAM 时也会附 `cache` 字段提示（探测结果 5 秒 TTL 缓存，不额外拖慢读写）；M3/M4 无 D-Cache、M7 默认不开，此时不产生任何噪声字段 | — |
 | `dcache_maintain` | **D-Cache 一致性维护**（M7 等带 D-Cache 的核）：`read_mem`/`write_mem` 命中 SRAM 时只提示「可能有陈旧值/被脏行回写覆盖」，本工具负责**动手消掉它**——`action="status"` 读 `SCB->CCR` 判使能位；`action="clean_invalidate"` 对目标地址先 `DCCMVAC` clean（把脏行写回内存）再 `DCIMVAC` invalidate（丢掉缓存副本），顺序不能反。维护后**前后各读一遍并对比**：值变了就明说「此前那次读确实取到了未回写的陈旧副本」，没变就如实说「倾向于该地址在 RAM 里就是这些值」，读不到 CCR 就说无法判断——**不猜**。目标在跑时读到的差异可能只是正常并发写，会附 `running` 提醒 | `action?`（`status`/`clean_invalidate`）、`addr?`、`n_bytes?` |
 | `run` | 全速运行 | — |
@@ -455,6 +457,7 @@ mdkdebug read_mem --arg addr=0x20000000 --arg n=16     # 省略 call 的简写
 | `modbus_raw` | **非规范 / 私有协议的裸帧收发**：`as_text=true` 按文本下发，`auto_crc=true` 自动补 CRC16 / LRC（手算校验最容易错）。响应按**帧间静默**切段，每段给 hex / ascii 与「能不能按 Modbus 解」，**解不了就说解不了** | `req`、`as_text?`、`auto_crc?`、`expect_len?`、`max_frames?`、`port?`、`baud?`、`serial_format?`、`timeout_ms?` |
 | `modbus_decode` | **离线解析报文**（不占端口、不发一个字节）：hex 或 ASCII 帧、支持多行批量；给出从站 / 功能码 / 载荷 / 校验结论，失败明确是「长度不足 / CRC 不过 / LRC 不过 / hex 非法」。**自动判方向**：先按应答解、不符再按请求解，结果给 `direction=response/request`（同形功能码标 `ambiguous`） | `frame`、`mode?` |
 | `modbus_scan` | **扫在线的从站**：`slaves` 支持 `"1-16"` / `"1,3,5"` / `"1-8,20"`；有应答就列出（含异常码——**异常码不等于不在线**，它说明从站收到了但拒绝了参数）。范围超 `max_slaves` **直接报错**，不静默少扫还报「扫描完成」 | `slaves?`、`func?`、`addr?`、`count?`、`timeout_ms?`、`max_slaves?`、`port?`、`baud?`、`serial_format?` |
+| `modbus_pointmap` | **点表探测**：从 `addr` 起连读 `count` 个点、重复采样 `samples` 次，按「值怎么变」分成 `constant`（像固定参数）/ `bistable`（只在 0/1 跳，像状态位）/ `drifting`（跨采样单调，像实时量）/ `changing` / `no_response`（**无应答 ≠ 值是 0**）。给引用号 `4xxxx/3xxxx/0xxxx/1xxxx`（**只是惯例标注**）、`value/min/max/span/distinct/changes/history`，以及只含常量点的 `point_table`；`out` 可落 JSON。语义标 `semantic_source=unconfirmed`，真正含义按设备手册确认 | `slave?`、`func?`、`addr?`、`count?`、`samples?`、`interval_ms?`、`port?`、`baud?`、`serial_format?`、`timeout_ms?`、`include_history?`、`max_count?`、`out?` |
 | `modbus_sniff` | **被动旁听，不发一个字节**：按静默切帧后列出（协议逆向 / 确认总线上到底有没有在跑）。总线上没主站请求时**一帧都收不到是正常结果**，不是故障 | `duration_ms?`、`max_frames?`、`gap_ms?`、`port?`、`baud?`、`serial_format?`、`mode?` |
 | `modbus_session` | **会话状态 / 开 / 关端口**：串口是独占资源，会话会持有到显式关闭或空闲超时（`idle_release_s` 默认 900s，进程退出也会释放）。收工要接串口助手 / 日志监听，先 `action="close"` | `action?`（`status` / `open` / `close`）、`port?`、`baud?`、`serial_format?`、`mode?` |
 | `list_uvoptx_breakpoints` | 读取持久化断点(.uvoptx) | `project?` |
@@ -688,13 +691,13 @@ target_guess(elf) → ocd_start(profile=...) → ocd_flash(file=...) → trace_i
 
 ### 工具面（默认精简 + 按需装载）
 
-222 个工具全量塞进上下文会稀释注意力、也吃掉上下文预算。所以**默认只暴露 44 个**（`core` 组 38 个 + 6 个元工具），其余 178 个**没被删掉、也没失效**，用 `toolset` 工具随时装回来：
+225 个工具全量塞进上下文会稀释注意力、也吃掉上下文预算。所以**默认只暴露 45 个**（`core` 组 39 个 + 6 个元工具），其余 180 个**没被删掉、也没失效**，用 `toolset` 工具随时装回来：
 
 ```text
 toolset(action="status")                        # 装了哪些组、收起多少个、怎么装回来
 toolset(action="load",   toolsets="mem,rtos")   # 追加装载（幂等，可反复调）
 toolset(action="unload", toolsets="trace")      # 收起
-toolset(action="load",   toolsets="all")        # 一次全装 222 个（=full/*）
+toolset(action="load",   toolsets="all")        # 一次全装 225 个（=full/*）
 ```
 
 装载也可以放在启动时：`MDKDEBUG_TOOLSETS=serial` 只留串口 14 个、`core,build`、`toolchain,target,ocd,trace` 把上百个 Keil 工具全收起来调非 MDK 芯片；`=all` 回到全开。**启动参数优先于环境变量**。
@@ -703,7 +706,7 @@ toolset(action="load",   toolsets="all")        # 一次全装 222 个（=full/*
 
 | 组名 | 内容 |
 |---|---|
-| `core` | 进出调试 / 运行控制 / 状态 / 跨会话状态 / 环境一致性体检、符号工程绑定、断点硬件残留校验、复位循环识别、可视化出图（38 个） |
+| `core` | 进出调试 / 运行控制 / 状态 / 跨会话状态 / 环境一致性体检、符号工程绑定、断点硬件残留校验、复位循环识别、可视化出图（39 个） |
 | `mem` | 内存与外设读写 / D-Cache 一致性维护（11 个） |
 | `symbol` | 符号与源码定位（7 个；`set_symbol_file`/`list_symbol_projects` 已上移 `core`） |
 | `build` | 编译 / 清理 / 烧录 / 工程配置 / 分散加载文件(.sct)受控编辑 / 固件契约预检、闭环验证 / 镜像取证 / 固件逆向（骨架/字节精确复刻/镜像切分/闭环台账/字符串池与死代码/两镜像逐函数差分/数据表导出/调用图栈深/字节与文本搜索/交叉引用）（38 个） |
@@ -724,10 +727,10 @@ toolset(action="load",   toolsets="all")        # 一次全装 222 个（=full/*
 
 | 档位 | 工具数 | 描述总字符 | 线上载荷 | 怎么用 |
 |---|---|---|---|---|
-| 默认（`core` 组 + 元工具，描述 `lean`） | 44 | 约 2.2 万 | **约 3.9 万**（−56%） | 不设环境变量 |
+| 默认（`core` 组 + 元工具，描述 `lean`） | 45 | 约 2.2 万 | **约 3.9 万**（−56%） | 不设环境变量 |
 | **`nano` 极简档**（自动用 `min` 描述档） | **19** | **约 6 千** | **约 1.5 万** | `MDKDEBUG_TOOLSETS=nano` 或 `toolset(toolsets="nano")` |
-| `all`（全装，描述默认 `lean`） | 222 | 约 10 万 | 约 20.2 万（−51%） | `toolset(toolsets="all")` |
-| `all` + `MDKDEBUG_DESC=min` | 222 | 约 6.6 万 | 约 16.7 万 | 工具全要，但描述只留一句摘要 |
+| `all`（全装，描述默认 `lean`） | 225 | 约 10 万 | 约 20.2 万（−51%） | `toolset(toolsets="all")` |
+| `all` + `MDKDEBUG_DESC=min` | 225 | 约 6.6 万 | 约 16.7 万 | 工具全要，但描述只留一句摘要 |
 | 上述任一档 + `MDKDEBUG_DESC=full` | — | 逐字节还原全文 | — | 要逐字完整说明时 |
 
 - **`nano` 档**不是「组」而是**档位**：它横跨 `core` / `build` / `trace` 三组，挑出 15 个最短入口（健康检查 / 编译烧录 / 进出调试 / 跑停 / 读写内存与变量 / 断点 / 读 trace / **取回完整说明的 `mdk_guide`**）**＋ 6 个元工具**，小上下文模型也能一次装全，之后再按需加装。
@@ -1763,6 +1766,20 @@ uVision 再打开就报错。批次97 把这条纪律做成**工具能执行的�
 > （**不按基址硬加**——段与段之间可以有空洞）；交叉引用给五类关系 + `confidence` 三档
 > （observed / inferred / weak）+ 所属函数，且把「解析不出的间接调用」单独计入 `unresolved`
 > ——「没找到引用者」与「有引用者但看不到」是两件事。`test_batch105` 73 条盯着这条。
+> **批次106（0.2.30）：把自己没有的三件事补上——写变量 / 转储 / 点表**。这三条都不是
+> 「再包一层」，而是此前**根本没有出口**的能力：① 只有 `read_variable`、`set_register`、
+> `write_mem`，**没有「按变量名写」**——而表达式赋值 `calc_expression("x = 1")` 是否有副作用
+> 由 Keil 决定，写失败也不报错，于是 `write_variable` 改成「自己算字节 → `write_mem` → 回读比对」，
+> 并把宽度来源（`size_bytes` / `sizeof` / ELF `st_size`）与越界拒绝写进实现。
+> ② `read_mem` 一次只能搬一块，读 64 KB 要几十次往返、几十 KB 十六进制也塞不进上下文；
+> 更麻烦的是**中间某块失败时没有任何交代**。`dump_memory` 分块落盘（bin/ihex/hexdump）、
+> 失败按 `gap_fill` 补齐并记 `gaps`（`complete=false`，明说补齐字节不是真实内容）、
+> 支持按文件长度续传与 `sha256`/吞吐交付。③ Modbus 只有**单次**读数，而人真正想知道的是
+> 「哪些地址是固定参数、哪些是实时量、哪些是 0/1 状态位、哪些地址从站没实现」——
+> 那只能从多次采样看出来，于是有 `modbus_pointmap`（`constant`/`bistable`/`drifting`/
+> `changing`/`no_response` 五档，语义标 `unconfirmed`，不替你判定「这就是流量」）。
+> 三者都遵守本仓库的老规矩：**宁可报错也不给错答案**（不截断、不假装读到、不猜语义）。
+> `test_batch106` 盯着这条。
 
 
 ### 逆向语义层：字符串 / 死代码 / 两镜像差分 / 栈深 / 数据表（批次102）

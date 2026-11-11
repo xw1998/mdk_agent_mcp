@@ -554,7 +554,7 @@ def section_e():
     srv = SV.create_server()
     tm = getattr(srv, "_tool_manager", None)
     names = sorted((getattr(tm, "_tools", None) or {}).keys())
-    check("E4 注册进服务（总数 222）", "view_render" in names and len(names) == 222, len(names))
+    check("E4 注册进服务（总数 225）", "view_render" in names and len(names) == 225, len(names))
     check("E5 check_surface 全过（无未归类/幽灵工具）", not A.check_surface(names),
           A.check_surface(names))
 
@@ -598,9 +598,9 @@ def section_f():
     check("F1 README 有 view_render（工具面/可读性入口）", "view_render" in readme, "")
     check("F2 SKILL 有 view_render 与 view_guide",
           "view_render" in skill and "view_guide" in skill, "")
-    check("F3 文档工具数同步为 222 / 收起 178",
-          "222 个" in readme and "178 个" in readme and
-          "222 个工具" in skill and "178 个" in skill, "")
+    check("F3 文档工具数同步为 225 / 收起 180",
+          "225 个" in readme and "180 个" in readme and
+          "225 个工具" in skill and "180 个" in skill, "")
 
 
 def main():

@@ -531,19 +531,19 @@ def group_g():
 
     names = [t.name for t in __import__("asyncio").run(
         SV.create_server(toolsets="all").list_tools())]
-    check("G1 本批不新增工具（总数 222＝批次86 加 recover_diff 之后）", len(names) == 222, len(names))
+    check("G1 本批不新增工具（总数 225＝批次86 加 recover_diff 之后）", len(names) == 225, len(names))
 
     core = TB.TOOLSETS.get("core") or set()
     check("G2 两个符号工具提到默认面 core（钥匙要放在够得着的地方）",
           {"list_symbol_projects", "set_symbol_file"} <= set(core),
           sorted(x for x in core if "symbol" in x))
-    check("G3 core 组 38 个 → 默认面 44（core 38 + 常驻 6）",
-          len(core) == 38, len(core))
+    check("G3 core 组 39 个 → 默认面 45（core 39 + 常驻 6）",
+          len(core) == 39, len(core))
     saved = os.environ.pop("MDKDEBUG_TOOLSETS", None)
     try:
         dn = [t.name for t in __import__("asyncio").run(SV.create_server().list_tools())]
-        check("G4 不设环境变量时默认暴露 44 个",
-              len(dn) == 44 and "set_symbol_file" in dn, (len(dn), "set_symbol_file" in dn))
+        check("G4 不设环境变量时默认暴露 45 个",
+              len(dn) == 45 and "set_symbol_file" in dn, (len(dn), "set_symbol_file" in dn))
     finally:
         if saved is not None:
             os.environ["MDKDEBUG_TOOLSETS"] = saved

@@ -95,7 +95,7 @@ def section_a():
     names = set(tools)
     check("A1 两个新工具都注册了",
           all(n in names for n in NEW_TOOLS), [n for n in NEW_TOOLS if n not in names])
-    check("A2 注册总数 222（本批新增 2 个）", len(names) == 222, len(names))
+    check("A2 注册总数 225（本批新增 2 个）", len(names) == 225, len(names))
     check("A3 build 组 38 个且两者都在 build 组",
           len(TB.TOOLSETS["build"]) == 38 and all(n in TB.TOOLSETS["build"]
                                                   for n in NEW_TOOLS),
@@ -403,14 +403,13 @@ def section_f():
     rd = open(os.path.join(ROOT, "README.md"), encoding="utf-8").read()
     check("F3 README 有批次105 的说明块", "批次105" in rd,
           [x for x in re.findall(r"批次1\d\d", rd)][-5:])
-    check("F4 README 目录树版本号与包一致（0.2.29）",
-          "版本号 0.2.29" in rd, re.findall(r"版本号 0\.2\.\d+", rd))
-
+    # 版本号本身不在这里断言数值（发版会变），只断言「三处一致」
     from mdkdebug import __version__ as V
+    check("F4 README 目录树版本号与包一致",
+          ("版本号 %s" % V) in rd, (V, re.findall(r"版本号 0\.2\.\d+", rd)))
     py = open(os.path.join(ROOT, "pyproject.toml"), encoding="utf-8").read()
     check("F5 版本三处同步（__init__ / pyproject / README）",
-          V == "0.2.29" and ('version = "%s"' % V) in py and
-          ("版本号 %s" % V) in rd, (V,))
+          ('version = "%s"' % V) in py and ("版本号 %s" % V) in rd, (V,))
     rt = open(os.path.join(ROOT, "tools", "run_all_tests.py"), encoding="utf-8").read()
     check("F6 全量闸门里含 test_batch105", '"test_batch105"' in rt)
 

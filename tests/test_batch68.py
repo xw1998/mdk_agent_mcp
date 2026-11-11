@@ -23,7 +23,7 @@ tree-sitter 解析（预编译轮子）+ SQLite 索引，落成 `mdkdebug/codein
   C 解析语义（C fixture）：include guard、条件编译、局部变量、fptr、calls_out、解析错误
   D 解析语义（C++ fixture）：class/namespace/field、调用、include 解析
   E 工具层：5 个工具端到端、错误码、注解、outctl、描述诚实边界、parser-missing
-  F 工具面：注册 200 / 默认面 44 / code 组 7 且默认收起 / 组数 12
+  F 工具面：注册 200 / 默认面 45 / code 组 7 且默认收起 / 组数 12
 
 运行：python -m tests.test_batch68
 """
@@ -670,8 +670,8 @@ def group_f():
     srv_all = SV.create_server(port=PORT_TOOL, toolsets="all")
     na = tool_names(srv_all)
 
-    check("F1 注册总数 222", len(na) == 222, len(na))
-    check("F2 默认只暴露 44 个", len(nd) == 44, len(nd))
+    check("F1 注册总数 225", len(na) == 225, len(na))
+    check("F2 默认只暴露 45 个", len(nd) == 45, len(nd))
     check("F3 code 组默认收起（4 个 code_* 都不在默认面）",
           not any(t.startswith("code_") for t in nd), [t for t in nd if t.startswith("code_")])
     check("F4 code 组正好是那 7 个工具",
@@ -686,9 +686,9 @@ def group_f():
     check("F7 toolset(status) 列得出 code 组与规模",
           grp.get("size") == 7, (st.get("groups") or {}).get("code"))
     r = call_sync(srv_def, "toolset", {"action": "load", "toolsets": "code"})
-    check("F8 toolset(load, code) 能把 7 个装回来，暴露数 44→51",
+    check("F8 toolset(load, code) 能把 7 个装回来，暴露数 45→52",
           r.get("ok") is True and len(r.get("loaded") or []) == 7
-          and r.get("exposed") == 51, r)
+          and r.get("exposed") == 52, r)
     check("F9 装回后 code_query 立刻可调",
           "code_query" in tool_names(srv_def), None)
     # 用**新的**默认面服务器：srv_def 上刚 load 过 code，不再是「未装载」
@@ -698,7 +698,7 @@ def group_f():
     check("F10 capabilities 的 tool_surface 里 code 组 7 个且列为「未装载」",
           (surf.get("groups") or {}).get("code") == 7
           and "code" in (surf.get("not_loaded_groups") or [])
-          and surf.get("registered_total") == 222, surf)
+          and surf.get("registered_total") == 225, surf)
 
 
 def main():

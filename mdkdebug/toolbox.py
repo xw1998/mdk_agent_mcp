@@ -44,6 +44,9 @@ TOOLSETS = {
         "run_timeout", "reset_connection", "wait_state", "wait_breakpoint",
         "set_breakpoint", "clear_breakpoint", "clear_all_breakpoints", "list_breakpoints",
         "read_mem", "write_mem", "calc_expression", "read_variable",
+        # 批次106：read_variable 的写入侧配对（按名写 + 类型感知 + 回读校验）。
+        # 放 core 的理由同 read_variable：它默认就该在手边，藏起来就没机会被想到。
+        "write_variable",
         "keil_command", "batch_debug_script", "keil_health", "diagnose",
         "restart_keil", "launch_uvision", "close_uvision", "list_uvision_instances",
         "read_console_output", "read_async_messages", "dismiss_dialog",
@@ -66,6 +69,9 @@ TOOLSETS = {
         "read_struct", "read_locals", "read_registers", "set_register", "cache_info",
         # D-Cache 一致性维护（批次49）：M7 上 DAP 直读 RAM 可能取到陈旧副本，先 clean 再 invalidate。
         "dcache_maintain",
+        # 批次106：区间转储到文件（bin/ihex/hexdump，可分块续传）。写文件，
+        # 属「内存进阶」场景，不进默认面。
+        "dump_memory",
     },
     "symbol": {
         # 批次67：set_symbol_file / list_symbol_projects 已上移到 core（默认面上就能切符号），
@@ -123,6 +129,8 @@ TOOLSETS = {
         # 因为「这次调串口」的场景里日志与 Modbus 往往同时要用。
         "modbus_read", "modbus_write", "modbus_raw", "modbus_decode",
         "modbus_scan", "modbus_sniff", "modbus_session",
+        # 批次106：多次采样把「常量/状态位/会变/无应答」分开——单次读数回答不了的问题。
+        "modbus_pointmap",
     },
     "advanced": {
         "clear_faults", "fault_report", "wait_fault", "watch_reset", "dwt",
