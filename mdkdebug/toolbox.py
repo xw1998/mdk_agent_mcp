@@ -126,6 +126,9 @@ TOOLSETS = {
         # 工具链或起一段模拟；属逆向场景，全部不进默认面。
         "recover_plan", "recover_status", "recover_c_context",
         "recover_c_check", "recover_c_build", "recover_emulate",
+        # 批次108：把「编出来的候选」和「原函数」放在同一个地址空间里跑同一组输入，
+        # 逐项比返回值与写内存。会落临时目录、跑工具链与模拟，同样不进默认面。
+        "recover_c_parity",
     },
     "serial": {
         "serial_list_ports", "serial_monitor_start", "serial_monitor_status",

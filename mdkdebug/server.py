@@ -86,6 +86,7 @@ from . import contextpack as _ctxpack   # 批次107：单函数「写 C 的证�
 from . import ccheck as _ccheck         # 批次107：候选 C 的结构体检
 from . import cbuild as _cbuild         # 批次107：回编译后的指令序列比对
 from . import emulate as _emulate       # 批次107：Unicorn 行为 oracle（可选依赖）
+from . import parity as _parity         # 批次108：候选 C 的行为 parity（真编真跑真比）
 from . import textio as _textio
 
 logger = logging.getLogger("mdkdebug.server")
@@ -8631,6 +8632,55 @@ def create_server(host: str = "127.0.0.1", port: int = 4823,
                                  max_insns=int(max_insns or 20000),
                                  stack=int(stack or 4096), ram=int(ram or 65536),
                                  timeout_us=int(timeout_us or 2000000))
+            return _js(o)
+        except Exception as e:  # noqa: BLE001
+            return _js({"ok": False, "error": str(e)})
+
+    @server.tool(
+        name="recover_c_parity",
+        title="固件逆向：候选 C 的行为 parity（真编 / 真链 / 真跑 / 逐项比）",
+        description=(
+            "把候选 C 编成真机器码，链到原镜像的地址空间里（用镜像符号表生成 symdefs，"
+            "对原镜像函数的调用解析成真地址），然后**与原函数用同一组输入各跑一次**，"
+            "比返回值与写过的内存。\n"
+            "判词：parity_exact（r0 与共同地址上的写逐字节一致）/ parity_return_only"
+            "（r0 一致、但写内存对不上：值不同或地址布局不同）/ parity_differs（r0 不同——"
+            "这是**真不一致**）"
+            "/ not_comparable（任一侧没跑到返回：外设、未映射、预算、编译或链接失败）。\n"
+            "耦合了上一批的两条腿：recover_c_build 只证明「指令序列像」，recover_emulate 只能跑"
+            "已有的机器码；候选 .o 没有绝对地址跑不起来，这一步补的就是链接。\n"
+            "**只认 r0 做返回值判词**：r1..r3 在返回那一刻是 caller-saved 残留，随地址布局变，"
+            "单独报在 same_scratch / differences.scratch_r1_r3 里，不参与判定。\n"
+            "**限制**：parity 只在这一组输入上成立（同一份代码换参数可以完全一致也可以完全不一致）；"
+            "外设不建模（碰到 0x40000000–0x5FFFFFFF 就停下判 not_comparable）；候选默认链到 0x20000000"
+            "与原镜像同块 RAM，布局一致时写值才逐字节可比，地址不同的写分列两栏；"
+            "RW 初值不搬（不走 scatter-load，非零初值的全局变量两侧都读成 0）。\n"
+            "Unicorn 与 ARM 工具链（armcc/armclang + armlink）任一缺失就 supported:false 并说清缺什么，"
+            "不降级成静态猜测。"
+        ),
+    )
+    async def recover_c_parity(path: str, source: str = "", target: str | int = 0,
+                               symbol: str = "", code: str = "", entryname: str = "",
+                               base: str | int = 0, compiler: str = "auto",
+                               cpu: str = "", opt: str = "-O2", includes: str = "",
+                               args: str = "", max_insns: int = 20000,
+                               stack: int = 4096, ram: int = 65536,
+                               timeout_us: int = 2000000, ro_base: str | int = 0,
+                               rw_base: str | int = 0, work_dir: str = "",
+                               keep: bool = False) -> str:
+        try:
+            o = _parity.run(str(path or "").strip(), source=str(source or "").strip(),
+                            base=_pi(base, "base", 0), target=_addr_arg(target),
+                            symbol=str(symbol or ""), code=str(code or ""),
+                            entryname=str(entryname or ""),
+                            compiler=str(compiler or "auto"), cpu=str(cpu or ""),
+                            opt=str(opt or "-O2"), includes=str(includes or ""),
+                            args=str(args or ""), max_insns=int(max_insns or 20000),
+                            stack=int(stack or 4096), ram=int(ram or 65536),
+                            timeout_us=int(timeout_us or 2000000),
+                            ro_base=_pi(ro_base, "ro_base", 0),
+                            rw_base=_pi(rw_base, "rw_base", 0),
+                            work_dir=str(work_dir or ""), keep=bool(keep))
             return _js(o)
         except Exception as e:  # noqa: BLE001
             return _js({"ok": False, "error": str(e)})

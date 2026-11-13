@@ -182,6 +182,8 @@ NON_IDEMPOTENT = {
     # 批次107：还原 C 的两个重环节——c_build 落临时目录并真的跑工具链（重跑
     # 产出可能不同），c_emulate 跑一段模拟并把内存写入扔掉（同样「重跑 ≠ 只跑一次」）。
     "recover_c_build", "recover_emulate",
+    # 批次108：c_parity 编链接跑一条龙（工具链 + 模拟），重跑产出未必相同。
+    "recover_c_parity",
     "scatter_edit", "core_select",
     "restart_keil", "reset_connection", "trace_swo_start", "trace_swo_stop",
     "trace_profile", "profile_function", "profile_sampling",
@@ -234,6 +236,8 @@ MUTATING = {
     # 批次107：c_build 会写临时目录并调用本机工具链；c_emulate 起一段模拟
     # （不改目标，但会消耗 CPU 并产生一次可观察的运行，不属只读）。
     "recover_c_build", "recover_emulate",
+    # 批次108：c_parity 会写临时目录、调工具链、跑一段模拟。
+    "recover_c_parity",
     # 批次49：函数运行时线录制会下/撤硬件断点并 halt/resume 目标；
     # D-Cache 维护会写 SCB 的 DCCMVAC/DCIMVAC（不改用户数据，但确实写目标状态）。
     "trace_record", "dcache_maintain",

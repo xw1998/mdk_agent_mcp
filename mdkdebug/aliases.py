@@ -188,6 +188,18 @@ _SPEC = {
                         "args": ["arguments", "argv", "params"],
                         "max_insns": ["max", "limit", "steps"],
                         "timeout_us": ["timeout", "us", "timeout_ms_hint"]},
+    # 批次108：候选 C 的行为 parity。src 收成 source、func 收成 symbol；
+    # 「入参」在这里是 r0..r3 的字面量，所以 argv/params 都指向 args。
+    "recover_c_parity": {"path": ["image", "axf", "elf", "firmware"],
+                         "source": ["src", "file", "cfile", "code_file"],
+                         "target": ["addr", "address", "func_addr"],
+                         "symbol": ["name", "func", "function"],
+                         "entryname": ["entry_name", "candidate_name", "cname"],
+                         "args": ["arguments", "argv", "params"],
+                         "compiler": ["cc", "toolchain", "which_cc"],
+                         "opt": ["opt_level", "O", "optimize"],
+                         "includes": ["inc", "include_dirs", "I"],
+                         "work_dir": ["workdir", "tmp", "build_dir"]},
 }
 
 # 时间参数的等价族。同族内「任意前缀 × 任意写法」都指向该工具的主时间名：

@@ -110,10 +110,10 @@ def section_a():
     check("A1 六个新工具都注册了",
           all(n in names for n in NEW_TOOLS),
           [n for n in NEW_TOOLS if n not in names])
-    check("A2 注册总数 231（批次106 后为 231，本批 +6）",
-          len(names) == 231, len(names))
-    check("A3 build 组 44 个（批次105 后为 44，本批 +6）",
-          len(TB.TOOLSETS["build"]) == 44, len(TB.TOOLSETS["build"]))
+    check("A2 注册总数 232（批次106 后为 232，本批 +6）",
+          len(names) == 232, len(names))
+    check("A3 build 组 45 个（批次105 后为 44，本批 +6）",
+          len(TB.TOOLSETS["build"]) == 45, len(TB.TOOLSETS["build"]))
     check("A4 六个都只归一组且归到 build",
           all(sum(1 for g in TB.TOOLSETS if n in TB.TOOLSETS[g]) == 1
               and n in TB.TOOLSETS["build"] for n in NEW_TOOLS),
@@ -708,8 +708,8 @@ def section_i():
     from mdkdebug import __version__ as V
     py = open(os.path.join(ROOT, "pyproject.toml"), encoding="utf-8").read()
     check("I5 版本三处同步（__init__ / pyproject / README）",
-          V == "0.2.31" and ('version = "%s"' % V) in py
-          and ("版本号 %s" % V) in rd, (V,))
+          ('version = "%s"' % V) in py and ("版本号 %s" % V) in rd
+          and re.match(r"^0\.2\.\d+$", V) is not None, (V,))
     check("I6 pyproject 里有 emu 可选依赖（unicorn 不进必装）",
           "[project.optional-dependencies]" in py and "unicorn" in py)
     rt = open(os.path.join(ROOT, "tools", "run_all_tests.py"),

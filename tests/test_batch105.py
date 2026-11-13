@@ -95,9 +95,9 @@ def section_a():
     names = set(tools)
     check("A1 两个新工具都注册了",
           all(n in names for n in NEW_TOOLS), [n for n in NEW_TOOLS if n not in names])
-    check("A2 注册总数 231（本批新增 2 个）", len(names) == 231, len(names))
-    check("A3 build 组 44 个且两者都在 build 组",
-          len(TB.TOOLSETS["build"]) == 44 and all(n in TB.TOOLSETS["build"]
+    check("A2 注册总数 232（本批新增 2 个）", len(names) == 232, len(names))
+    check("A3 build 组 45 个且两者都在 build 组",
+          len(TB.TOOLSETS["build"]) == 45 and all(n in TB.TOOLSETS["build"]
                                                   for n in NEW_TOOLS),
           len(TB.TOOLSETS["build"]))
     check("A4 只归一组（一键一义）",

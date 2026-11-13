@@ -239,7 +239,7 @@ mdk_agent/
 ├── requirements.txt          # Python 依赖
 ├── README.md
 ├── mdkdebug/
-│   ├── __init__.py           # 包初始化（版本号 0.2.31）
+│   ├── __init__.py           # 包初始化（版本号 0.2.32）
 │   ├── cli.py                # 命令行入口（main，mdkdebug 命令）
 │   ├── uvsock.py             # UVSOCK 协议：命令码、VSET/AMEM/EXECCMD 打包与解析
 │   ├── interface.py          # TCP 物理接口层（含异步消息残留清理）
@@ -256,7 +256,7 @@ mdk_agent/
 │   ├── linkio.py             # 链路原语层：把「读/写内存、读核寄存器、停/走」从 Keil(UVSOCK) 与 OpenOCD 里抽出来
 │   ├── traceproto.py         # trace 协议：ITM 解码、MTF 帧格式与 CRC8
 │   ├── trace.py              # trace：SWO / RTT（主机侧自研）/ SWD 采样 / DWT / 插桩组件部署（观测类工具两条链路通用）
-│   └── server.py             # MCP Server 与 231 个工具定义
+│   └── server.py             # MCP Server 与 232 个工具定义
 ├── components/
 │   └── trace/                # 目标侧插桩组件（ITM / RTT / UART / BUFF 四后端，只依赖 CMSIS）
 │                             #   mdk_trace.[ch] / mdk_trace_rtt.[ch] / config 默认头 / CMakeLists / README
@@ -350,9 +350,9 @@ mdkdebug read_mem --arg addr=0x20000000 --arg n=16     # 省略 call 的简写
 
 ## 暴露的 MCP 工具
 
-共 **231** 个（**默认只暴露 45 个**，其余按需装载，见[工具面](#工具面默认精简--按需装载)），分两大块：
+共 **232** 个（**默认只暴露 45 个**，其余按需装载，见[工具面](#工具面默认精简--按需装载)），分两大块：
 
-- **MDK 族（143 个）**——调试读写 / 断点与命中等待 / 外设与内存 / 符号定位 / 工程分析 / **编译·清理·烧录** / **UV4 命令行批处理调试** / **CMSIS-SVD 解码** / **工程文件与分散加载文件(.sct)受控编辑** / **复位循环识别** / Keil 生命周期管理 / **宿主机串口日志与命令应答 · Modbus 主站（RTU/ASCII + 裸帧）** / **看门狗冻结与 Cache 感知** / 环境自检引导（下表）。
+- **MDK 族（144 个）**——调试读写 / 断点与命中等待 / 外设与内存 / 符号定位 / 工程分析 / **编译·清理·烧录** / **UV4 命令行批处理调试** / **CMSIS-SVD 解码** / **工程文件与分散加载文件(.sct)受控编辑** / **复位循环识别** / Keil 生命周期管理 / **宿主机串口日志与命令应答 · Modbus 主站（RTU/ASCII + 裸帧）** / **看门狗冻结与 Cache 感知** / 环境自检引导（下表）。
 - **非 MDK 族（82 个）**——**工具链**（gcc/make/cmake 探测与调用、构建、ELF/size/objcopy、编译错误解析，10 个）/ **目标档案与多核**（接口·速度·SWO·RTT 参数档案与自动识别、工程现场配置发现、多核目标的核列举与切换，7 个）/ **OpenOCD**（会话·内存·寄存器·断点·烧录，17 个）/ **trace 与覆盖率**（SWO·RTT·采样剖析·DWT·非侵入式 scope·插桩组件部署·**代码覆盖率**·**ETM 能力探测**·**函数运行时线录制**·**目标侧缓冲后端**·**SWD 无缝流后端**·**任务表取名**，38 个）/ **RTOS 任务感知**（任务列表·栈水位·队列信号量，3 个）/ **C 代码索引**（建/同步索引·符号检索·单符号源码体·文件清单·调用关系与影响面，7 个）——不依赖 Keil，同样能在 RISC-V / ESP32 等非 MDK 芯片上工作（见[非 MDK 芯片与 trace](#非-mdk-芯片与-trace不依赖-keil)）。
 - **常驻元工具（6 个）**——`toolset`（工具面按需装载）/ `list_tools` / `capabilities` / `get_version` / `tools_groups` / `tools_load`：**永不被裁**，否则 AI 连工具清单都问不出来、也装不回来。
 - **RTOS 任务感知（3 个，已计在上面非 MDK 族里，单列只为讲清它跨两条链路）**——`rtos_info` / `rtos_tasks` / `rtos_objects`：FreeRTOS 的任务列表、状态、**栈水位**与队列/信号量。**跨两条链路**（有 Keil 会话走 UVSOCK，否则走 OpenOCD），因为「多任务卡死」既发生在 MDK 工程里也发生在 gcc 工程里（见 [RTOS 任务感知](#rtos-任务感知rtos_3-个)）。
@@ -691,13 +691,13 @@ target_guess(elf) → ocd_start(profile=...) → ocd_flash(file=...) → trace_i
 
 ### 工具面（默认精简 + 按需装载）
 
-231 个工具全量塞进上下文会稀释注意力、也吃掉上下文预算。所以**默认只暴露 45 个**（`core` 组 39 个 + 6 个元工具），其余 186 个**没被删掉、也没失效**，用 `toolset` 工具随时装回来：
+232 个工具全量塞进上下文会稀释注意力、也吃掉上下文预算。所以**默认只暴露 45 个**（`core` 组 39 个 + 6 个元工具），其余 187 个**没被删掉、也没失效**，用 `toolset` 工具随时装回来：
 
 ```text
 toolset(action="status")                        # 装了哪些组、收起多少个、怎么装回来
 toolset(action="load",   toolsets="mem,rtos")   # 追加装载（幂等，可反复调）
 toolset(action="unload", toolsets="trace")      # 收起
-toolset(action="load",   toolsets="all")        # 一次全装 231 个（=full/*）
+toolset(action="load",   toolsets="all")        # 一次全装 232 个（=full/*）
 ```
 
 装载也可以放在启动时：`MDKDEBUG_TOOLSETS=serial` 只留串口 14 个、`core,build`、`toolchain,target,ocd,trace` 把上百个 Keil 工具全收起来调非 MDK 芯片；`=all` 回到全开。**启动参数优先于环境变量**。
@@ -709,7 +709,7 @@ toolset(action="load",   toolsets="all")        # 一次全装 231 个（=full/*
 | `core` | 进出调试 / 运行控制 / 状态 / 跨会话状态 / 环境一致性体检、符号工程绑定、断点硬件残留校验、复位循环识别、可视化出图（39 个） |
 | `mem` | 内存与外设读写 / D-Cache 一致性维护（11 个） |
 | `symbol` | 符号与源码定位（7 个；`set_symbol_file`/`list_symbol_projects` 已上移 `core`） |
-| `build` | 编译 / 清理 / 烧录 / 工程配置 / 分散加载文件(.sct)受控编辑 / 固件契约预检、闭环验证 / 镜像取证 / 固件逆向（骨架/字节精确复刻/镜像切分/闭环台账/字符串池与死代码/两镜像逐函数差分/数据表导出/调用图栈深/字节与文本搜索/交叉引用/**还原 C 闭环的六件（计划/证据包/核对/回编译/模拟）**）（44 个） |
+| `build` | 编译 / 清理 / 烧录 / 工程配置 / 分散加载文件(.sct)受控编辑 / 固件契约预检、闭环验证 / 镜像取证 / 固件逆向（骨架/字节精确复刻/镜像切分/闭环台账/字符串池与死代码/两镜像逐函数差分/数据表导出/调用图栈深/字节与文本搜索/交叉引用/**还原 C 闭环的七件（计划/证据包/核对/回编译/模拟/行为 parity）**）（45 个） |
 | `serial` | 宿主机串口监听与命令应答 + Modbus 主站（14 个） |
 | `advanced` | 诊断 / 剖析 / SVD / 工程编辑 / 复位循环识别等进阶能力（26 个） |
 | `toolchain` | 非 MDK：工具链探测 / 构建 / 编译 / ELF·size·objcopy / 编译错误解析（10 个） |
@@ -729,8 +729,8 @@ toolset(action="load",   toolsets="all")        # 一次全装 231 个（=full/*
 |---|---|---|---|---|
 | 默认（`core` 组 + 元工具，描述 `lean`） | 45 | 约 2.2 万 | **约 3.9 万**（−56%） | 不设环境变量 |
 | **`nano` 极简档**（自动用 `min` 描述档） | **19** | **约 6 千** | **约 1.5 万** | `MDKDEBUG_TOOLSETS=nano` 或 `toolset(toolsets="nano")` |
-| `all`（全装，描述默认 `lean`） | 231 | 约 10 万 | 约 20.2 万（−51%） | `toolset(toolsets="all")` |
-| `all` + `MDKDEBUG_DESC=min` | 231 | 约 6.6 万 | 约 16.7 万 | 工具全要，但描述只留一句摘要 |
+| `all`（全装，描述默认 `lean`） | 232 | 约 10 万 | 约 20.2 万（−51%） | `toolset(toolsets="all")` |
+| `all` + `MDKDEBUG_DESC=min` | 232 | 约 6.6 万 | 约 16.7 万 | 工具全要，但描述只留一句摘要 |
 | 上述任一档 + `MDKDEBUG_DESC=full` | — | 逐字节还原全文 | — | 要逐字完整说明时 |
 
 - **`nano` 档**不是「组」而是**档位**：它横跨 `core` / `build` / `trace` 三组，挑出 15 个最短入口（健康检查 / 编译烧录 / 进出调试 / 跑停 / 读写内存与变量 / 断点 / 读 trace / **取回完整说明的 `mdk_guide`**）**＋ 6 个元工具**，小上下文模型也能一次装全，之后再按需加装。
@@ -1780,6 +1780,17 @@ uVision 再打开就报错。批次97 把这条纪律做成**工具能执行的�
 > `changing`/`no_response` 五档，语义标 `unconfirmed`，不替你判定「这就是流量」）。
 > 三者都遵守本仓库的老规矩：**宁可报错也不给错答案**（不截断、不假装读到、不猜语义）。
 > `test_batch106` 盯着这条。
+> **批次108（0.2.32）：还原 C 的闭环补上最后一条腿——行为 parity**。批次107 有两条半截的腿：
+> `recover_c_build` 只证明「候选编出来的指令序列像」，`recover_emulate` 只能跑**已经存在的机器码**。
+> 中间的缺口是硬的：候选 C 编出来是**可重定位的 `.o`**，里面没有绝对地址，跑不起来。本批补
+> `recover_c_parity`——用原镜像的符号表生成 armlink 的 `symdefs`，把候选链到一块空闲地址上
+> （对原镜像函数的调用因此解析成真地址），于是**候选与原函数处在同一个地址空间**，用同一组
+> r0..r3 与同一段栈各跑一次，逐项比返回值与写过的内存。判词
+> `parity_exact` / `parity_return_only` / `parity_differs` / `not_comparable`——最后一条是
+> 如实说「测不了」（外设、未映射、预算、编译或链接失败），**不是**「一致」。
+> 两条硬口径：**只认 r0 做返回值判词**（r1..r3 在返回那一刻是 caller-saved 残留，随布局变，
+> 拿它们判会把同源重编误判成不一致）；**parity 只在给的那组输入上成立**，不写「两函数等价」。
+
 > **批次107（0.2.31）：还原 C 的闭环——计划 / 证据包 / 核对 / 回编译 / 模拟**。此前逆向工具能
 > 回答「这段字节是什么、属于谁、像什么类型」，但**没人管「怎么把它写回 C」**：没有清单说先做
 > 哪个、没有一处把写 C 需要的证据打成一个包、写完没人核对、更没法验证「我写的 C 编出来是不是
@@ -1964,6 +1975,39 @@ uVision 再打开就报错。批次97 把这条纪律做成**工具能执行的�
 3. **模拟「返回」要看 LR 写什么**：把 LR 写成 `SENTRY|1`（带 Thumb 位）会让 `bx lr` 跳到
    `0xFFFFFFF1`，取指失败报 `UC_ERR_FETCH_UNMAPPED`，`stop_reason` 变成 `error` 而**看起来
    像跑挂了**；现在 LR 写不带位的 `SENTRY`，`emu_start(begin, SENTRY)`，报 `returned`。
+
+### 行为 parity：候选 C 真编真链真跑（批次108）
+
+`recover_c_parity` 把「我写的这段 C 到底做了什么」变成可比的数字。一条龙：编（AC6 `armclang`
+或 AC5 `armcc`）→ 生成 `symdefs`（从原镜像的 `.symtab` 取 FUNC/OBJECT 符号）→ `armlink`
+把候选链到 `ro_base`（默认 = 原镜像末尾再往上、避开外设段）与 `rw_base`（默认 `0x20000000`，
+与原镜像同一块 RAM）→ 两侧同一组输入各跑一次 → 逐项比。
+
+- **判词**：`parity_exact`（r0 一致 + **共同地址**上的写逐字节一致）/ `parity_return_only`
+  （r0 一致，但写内存对不上——值不同，或地址布局不同导致只有一侧写了）/ `parity_differs`
+  （r0 不同，**这是真不一致**）/ `not_comparable`（任一侧没跑到 `returned`，或编译/链接失败）。
+- **为什么 `not_comparable` 必须单独存在**：函数里只要碰了 `0x40000000~0x5FFFFFFF` 的外设，
+  两侧都会以 `peripheral_access` 停下。这时候「停下那一刻寄存器恰好相等」不是 parity，
+  硬判成一致就是**假绿**。
+- **写内存怎么比**：按「地址 + 宽度」对齐，只在两侧都写过的地址上比值；只在一侧出现的写
+  分列 `writes.only_in_reference` / `writes.only_in_target`，**不被当成不一致**（候选的全局
+  变量在 `--rw-base` 上、原函数的在镜像 RAM 里，同一变量地址本来就不同）。
+
+三处只有做的时候才会踩到的口径与缺陷：
+
+1. **返回值只有 r0**（本批定的口径）：第一版拿 `r0..r3` 全比，结果**同源重编**（同一份 C、
+   同一优化级）被自己的工具判成 `parity_differs`——差的是 r2/r3 里残留的基址（`0x20000000`
+   vs 候选的 `0x20000000` 之外的布局值）。AAPCS 只有 r0（及 64 位返回的 r1）承载返回值，
+  其余是 caller-saved 残留，现在单列 `same_scratch` / `differences.scratch_r1_r3`，
+  并**不参与判词**。
+2. **armlink 的 `ER_ZI` 不在任何 PT_LOAD 里**：它是 `SHT_NOBITS` **节**（RW/ZI 段在 armcc
+   链接产物里靠节而不是段表达），只按 `PT_LOAD` 映射的话候选一写全局变量就以
+   `unmapped_access` 停下——看起来像「候选把内存写坏了」。现在段读完再补一遍**有地址的节**，
+   并跳过调用方已自己映射的区间（模拟器给原镜像 RAM 留的零区）。
+3. **RW 初值不搬**：armlink 把非零初值放在 ROM 镜像里、由启动时的 scatter-load 复制到 RAM。
+   模拟器不跑启动代码，所以**非零初值的全局变量在两侧都读成 0**。这条写进 `scope`——
+   它会让「读初值的函数」在两侧同时错，于是 parity 看起来仍然一致，**这是本工具最容易被
+   误读的地方**。
 
 ### 底层库
 
