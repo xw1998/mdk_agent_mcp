@@ -239,7 +239,7 @@ mdk_agent/
 ├── requirements.txt          # Python 依赖
 ├── README.md
 ├── mdkdebug/
-│   ├── __init__.py           # 包初始化（版本号 0.2.34）
+│   ├── __init__.py           # 包初始化（版本号 0.2.35）
 │   ├── cli.py                # 命令行入口（main，mdkdebug 命令）
 │   ├── uvsock.py             # UVSOCK 协议：命令码、VSET/AMEM/EXECCMD 打包与解析
 │   ├── interface.py          # TCP 物理接口层（含异步消息残留清理）
@@ -558,7 +558,7 @@ H7 双核（CM7 + CM4）、RP2040 双核（M0+ × 2）这类目标上，最容�
 
 | 工具 | 说明 | 主要参数 |
 |------|------|----------|
-| `trace_guide` | 主题式使用引导（接线、SWO 速率怎么定、RTT 集成、采样剖析代价、两条链路怎么选…），不认识的方法名会列出可选主题而不是给空 | `topic?` |
+| `trace_guide` | 主题式使用引导（接线、SWO 速率怎么定、RTT 集成、采样剖析代价、两条链路怎么选…），不认识的方法名会列出可选主题而不是给空。**`topic="routes"` 给出六条通路的全表**（免插桩/插桩、停不停机、丢不丢事件、各自的代价与详见主题）——新读者先看这一张再挑工具（批次111） | `topic?` |
 | `trace_status` | trace 紧凑状态：模式、**当前用的链路**、事件**计数**、各后端状态、解码器统计（不是把事件全倒出来） | — |
 | `trace_swo_start` | 配 TPIU + 开 ITM 端口（`coreclk`/`baud` 缺省从档案取），开始把 SWO 数据落到文件 | `file?`、`coreclk?`、`baud?`、`ports?`、`profile?` |
 | `trace_swo_read` | **增量读** SWO 文件（每批只给新增事件，不重复倒）；返回事件、解码器统计与后端状态 | `max_events?`、`ports?` |
@@ -596,6 +596,28 @@ H7 双核（CM7 + CM4）、RP2040 双核（M0+ × 2）这类目标上，最容�
 | `trace_stats` | **在已有事件上算结论**（不是新的采集后端）：把 MTF / SWD 会话 / buff 三类源归一化成统一事件模型，再算调度（逐任务 exec/占比/进出次数、CPU 负载、idle 占比）、同步原语（按 op 计数、按对象聚合、wait→signal/timeout 配对与等待时长 min/max/mean、没配上的 wait）、堆（分配/释放字节、净额、最大单次、未知尺寸）、中断（enter/exit 配对、时长、最慢的哪个 IRQ、超阈值数）、异常（类别 + CFSR 拆位）、断口与段重开、时间轴健康（dt min/max/mean、zero、frozen、长静默）。**两条硬规矩**：① 每个指标要么带 `basis`（依据），要么进 `not_applicable`（说明为什么算不了）；② **时间占比类只认目标侧时间基**——MTF（SWO/RTT）只有主机到达时刻、混着链路与主机调度抖动，一律落 `not_applicable`，绝不拿错时间基算一个看着正常的数。计数类（事件数/类型分布/同步次数/堆净额）任何源都算。`source=auto` **不隐式读设备**（要看目标 RAM 里的 buff 得显式 `source="buff"`）| `source?`、`elf?`、`addr?`、`limit?`、`names?`、`link?`、`cpu_hz?`、`isr_long_us?` |
 | `trace_diagnose` | **规则化诊断**：把 `trace_stats` 的事实过一遍 16 条规则，产出 findings（每条带 `severity` error/warn/info + `evidence` 最小证据 + `hint` 下一步），`verdict` 只有 problems / warnings / clean 三态（不编「健康分」）。规则覆盖 no-data / no-timeline / timebase-missing / dt-frozen / dt-zero-heavy / events-lost / segments-restarted / **kernel-hooks-absent**（有事件但没有任何内核事件——多半是 `MDK_TRACE_SVCRT_HOOKS` 没开，而不是「目标什么都没做」）/ no-sched / sched-no-time / isr-unpaired / isr-long / fault-present / sync-wait-unpaired / sync-pair-ambiguous / quiet-window。**`checked` 与 `not_applicable` 必须一起读**：`checked` 是**真的评估过**的规则、`not_applicable` 是没法评估的（带原因），只读 findings 会把「没查」当成「没问题」 | 同 `trace_stats`，另 `quiet_ratio?`、`with_stats?` |
 | `trace_watch` | **条件等待（批次75，「通知 AI」的形态）**：把「等某件事发生」告诉工具，别一点一点翻事件。MCP 服务端不能主动唤醒模型，所以做成**一次有界长轮询**（`action="wait"`，`timeout_ms` 上限 60000）：反复搬一块 + 判一次，命中即返回**命中事件 + 前后上下文（`before`/`after`）+ 整段会话的诊断结论**。条件语言一套管两种事件——**手动插桩事件**（自定 `id`，如 `id=42`）与**内核自动钩子事件**（`sched`/`sync`/`heap`/`isr`/`fault`）在同一条流上；**竖线表「或」、逗号表「且」**、裸词是 `type` 简写，例：`sync,obj=cond,op=wait`、`isr,id=10`、`t_us>=1500`、`heap,op=alloc,size>=256`。**字段/枚举写错一律报错**（附可用取值），不静默变成「永不命中」；先 `action="test"` 对已录事件预检、`arm` 只装条件（默认从当前位置起判）、`status` 看进展、`clear` 卸掉。**没命中 ≠ 没发生**：`coverage` 明说这段是不是完整的（目标丢过事件 / 会话被裁剪 / 期间一条新事件都没有 ⇒ `complete=false`） | `action?`、`spec?`、`min_count?`、`timeout_ms?`、`pace_ms?`、`before?`、`after?`、`max_hits?`、`elf?`、`addr?`、`link?`、`source?`、`limit?`、`names?`、`cpu_hz?`、`diagnose?`、`cursor?`、`out_file?` |
+
+#### trace 六条通路怎么选（批次111）
+
+`trace_*` 有三十多个工具，容易上来就抓一个用错。选路只问三句：**要不要改目标代码**（插桩）／
+**会不会停机**／**能不能一条不丢**。`trace_guide(topic="routes")` 是这张全表的取回入口，
+每条都标了「详见 topic=…」，不用从工具名猜。
+
+| 要什么 | 通路（工具） | 插桩 | 停机 | 代价 / 前提 |
+|--------|--------------|------|------|-------------|
+| 变量随时间怎么变 | `trace_scope_start → trace_scope_read → trace_scope_stop` | 否 | 否 | 采样间隔内的跳变看不到；只用 SWD 两线 |
+| 程序热点占多少 | `trace_pcsample`（确定性分布用 `trace_profile`） | 否 | `pcsample` 否 / `profile` **每次采样都 halt** | 采样式，不是精确计数 |
+| 谁调了谁、进出几次 | `trace_record` | 否 | **是**（每次命中 halt→读→resume） | 受 FPB 槽位限制，高频短函数会拖慢并丢事件 |
+| 有名字的事件/日志 | `trace_eventrec` | 是（CMSIS EventRecorder） | 否 | 要有 SCVD 才有名字，不是自动捕获 |
+| 目标主动往主机打 | `trace_rtt_attach → trace_rtt_read / trace_rtt_write → trace_rtt_detach` | 是（SEGGER RTT） | 否 | 只靠内存读写，与 ocd 的 rtt 命令无关 |
+| 插桩事件流（三后端） | `trace_swo_start/read`（stream）／`trace_buff_status/dump`（buff）／`trace_swd_status/read`（swd） | 是 | 否 | 同一份插桩代码，`MDK_TRACE_BACKEND_*` 重编切换；swd 是唯一「未读区不覆盖」的 |
+
+硬边界写死在这里：**「全自动、无损、每跳都记」= ETM 并行 trace 口或 SWO 指令 trace，SWD 两线做不到。**
+
+**状态工具不是采集工具**，四个各看一层：`trace_status` 是跨后端的会话总览（mode/链路/计数/解码器统计），
+`trace_swd_status` 只报 swd 后端那 80 字节控制块，`trace_buff_status` 只报 buff 后端的控制块，
+`trace_eventrec(action="status")` 只报 EventRecorder 自己的录制器状态。采集入口只有
+`trace_swo_read` / `trace_buff_dump` / `trace_swd_read`（Event Recorder 用 `trace_eventrec(action="read"|"stats")`）。
 
 ### 结果可视化（`view_*`，2 个）
 
@@ -1793,6 +1815,19 @@ uVision 再打开就报错。批次97 把这条纪律做成**工具能执行的�
 > **不合并的**：`uvprojx_read` / `uvprojx_edit` / `project_file_check` / `project_file_repair`
 > （读、写、体检、修复四件事，风险与返回形态都不同）、`recover_bindiff` 的两种模式之外的同构
 > 工具（后端不同，前端壳相同但底座是两套实现）、以及连接器层——那一层只有一个服务，不是重复实现。
+
+> **批次111（0.2.35）：trace 六条通路互指路 + 状态工具分工收敛**。上一轮审计发现 `trace_*` 有
+> 三十多个工具，而「六条通路」只在各处零散地讲，读者容易一上来就选错路（拿 `trace_profile`
+> 当非侵入采样、拿 `trace_status` 当取事件）。本批**不动任何采集行为**，只把选择与分工钉进描述层：
+> ① `trace_guide` 新增 **`topic="routes"`**——先按三问（要不要改目标代码 / 会不会停机 /
+> 能不能一条不丢）选一条，每条都给工具名、代价与「详见 topic=…」；`topic="howto"` 顶部指过来。
+> ② 硬边界写死：**「全自动、无损、每跳都记」只有 ETM 能办，SWD 两线做不到**。
+> ③ 四类状态工具写清各看一层（`trace_status` 跨后端总览 / `trace_swd_status` swd 控制块 /
+> `trace_buff_status` buff 控制块 / `trace_eventrec(action=status)` 录制器），并互相点名，
+> 同时说明**采集入口只有** `trace_swo_read` / `trace_buff_dump` / `trace_swd_read`。
+> ④ 十个高频入口（含 `trace_record` / `trace_eventrec` / `trace_pcsample` / `trace_scope_start` /
+> `trace_rtt_attach` / `trace_profile`）描述末尾都挂 `topic=routes` 出口。
+> 工具面仍是 227，零新增依赖；指针一律放描述**末尾**——`lean` 档只保留段首+段末，放中间会被裁掉。
 
 > **批次110（0.2.34）：parity 支持多组输入（`args_sets`）**。批次108 把
 > 「候选 C 与原函数跑同一组输入」接上了，但**只跑一组**——而「同一份代码换参数可以完全一致

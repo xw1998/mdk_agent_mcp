@@ -16,6 +16,7 @@
 """
 import json
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -272,7 +273,9 @@ def section_e():
     check("E3 工具自己的 scope 已改读法（不再是「这一组输入」）",
           "跑过的那几组输入" in pf and "这一组输入" not in pf, None)
     init = open(os.path.join(ROOT, "mdkdebug", "__init__.py"), "rb").read().decode("utf-8")
-    check("E4 版本号已到 0.2.34", '0.2.34' in init, init[-200:])
+    _m = re.search(r'__version__\s*=\s*"([0-9.]+)"', init)
+    _v = tuple(int(x) for x in _m.group(1).split(".")) if _m else (0,)
+    check("E4 版本号不低于 0.2.34（本批是下限，不锁死具体值）", _v >= (0, 2, 34), init[-200:])
     gate = open(os.path.join(ROOT, "tools", "run_all_tests.py"), "rb").read().decode("utf-8")
     check("E5 本批已登记进全量闸门", '"test_batch110"' in gate, None)
     check("E6 零新增依赖（parity 仍只用已有模块）",

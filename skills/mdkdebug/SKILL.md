@@ -508,6 +508,28 @@ RTT、变量 scope、halt 采样、DWT 计数、PC 采样这些**观测**工具�
 - **统一信封**：所有工具返回体都带 `status`（ok/error/…) 与 `next_actions`（下一步建议）；
   失败时还有 `error_code` 与 `error_hint`。
 
+### 观测之前先选路：六条通路（`trace_guide(topic="routes")` 是全表）
+
+`trace_*` 有三十多个工具，**别上来就抓一个用**。先问三句：**要不要改目标代码**（插桩）／
+**会不会停机**／**能不能一条不丢**，再按这张表挑（完整版含每条代价，取回入口 `trace_guide(topic="routes")`）：
+
+| 要什么 | 通路 | 插桩 | 停机 |
+|--------|------|------|------|
+| 变量随时间怎么变 | `trace_scope_start → trace_scope_read → trace_scope_stop` | 否 | 否（有采样间隔） |
+| 程序热点占多少 | `trace_pcsample`（要确定性分布才用 `trace_profile`，它**每次采样都 halt**） | 否 | 否 / 是 |
+| 谁调了谁、进出几次 | `trace_record`（受 FPB 槽位限制） | 否 | **是** |
+| 有名字的事件/日志 | `trace_eventrec`（要 CMSIS EventRecorder + SCVD） | 是 | 否 |
+| 目标主动往主机打 | `trace_rtt_attach → trace_rtt_read/write → trace_rtt_detach` | 是（SEGGER RTT） | 否 |
+| 插桩事件流 | stream `trace_swo_*` ／ buff `trace_buff_*` ／ swd `trace_swd_*` | 是 | 否 |
+
+**硬边界**：「全自动、无损、每跳都记」= ETM 并行 trace 口或 SWO 指令 trace，**SWD 两线做不到**，
+先 `trace_etm_probe` 问板子有没有，再谈要不要。
+
+**状态工具不是采集工具**：`trace_status` 是跨后端总览（mode/链路/计数/解码器统计），
+`trace_swd_status` / `trace_buff_status` 各看自己那一个控制块，`trace_eventrec(action="status")`
+看录制器自己。**采集入口只有** `trace_swo_read` / `trace_buff_dump` / `trace_swd_read`
+（Event Recorder 用 `trace_eventrec(action="read"|"stats")`）。
+
 ### 插桩 trace 的两种工作模式：stream 与 buff
 
 内核/固件往往跑得比调试器读得快——**不插桩、靠轮询读 SRAM 看高频事件是走不通的**

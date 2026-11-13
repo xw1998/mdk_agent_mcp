@@ -6085,7 +6085,9 @@ def create_server(host: str = "127.0.0.1", port: int = 4823,
             "（符号与板上固件不同源时正是这种「假符号」场景）。\n"
             "action：run（默认，录一次并返回报告）/ status（上次报告摘要）/ "
             "read（带 kind/func/limit 过滤的时间线）/ stop（停目标并清掉残留断点）。"
-            "reloc_delta 用于 App 重定位场景（运行地址 = 链接地址 + delta）。"
+            "reloc_delta 用于 App 重定位场景（运行地址 = 链接地址 + delta）。\n"
+            "**这条是「免插桩但会停机」**：不许停机时用 Event Recorder（trace_eventrec，"
+            "要插桩）或 RTT；只看热点占比用 trace_pcsample（全表见 trace_guide(topic=routes)）。"
         ),
     )
     async def trace_record(action: str = "run", link: str = "auto", funcs: str = "",
@@ -6272,7 +6274,10 @@ def create_server(host: str = "127.0.0.1", port: int = 4823,
             "与槽位；ts 是目标侧时间戳（DWT CYCCNT / SysTick），不是主机时间；读到写一半的"
             "记录会跳过并计数，不当数据。\n"
             "定位：默认用当前符号文件里的 EventRecorderInfo 符号，也可用 info_addr 直接指地址。"
-            "link 选内存通路：auto（默认）/ keil / ocd。"
+            "link 选内存通路：auto（默认）/ keil / ocd。\n"
+            "**这是「插桩但不停机」那一条**：它替代不了不插桩的通路"
+            "（trace_scope_start / trace_pcsample / trace_record），"
+            "全表见 trace_guide(topic=routes)。"
         ),
     )
     async def trace_eventrec(action: str = "status", link: str = "auto",

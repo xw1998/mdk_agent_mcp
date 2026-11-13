@@ -3985,7 +3985,49 @@ def _default_js(obj) -> str:
 
 
 GUIDE = {
+    "routes": (
+        "六条通路：先按三问选一条——**要不要改目标代码**（插桩）/ **会不会停机** / "
+        "**能不能一条不丢**；选定后再看它的代价。\n"
+        "  ① 变量时间线（免插桩、不停机、有采样间隔）——trace_scope_start → trace_scope_read → trace_scope_stop\n"
+        "     只要 SWD 两线；代价：轮询间隔内的跳变看不到，采样率是主机轮询率。"
+        "详见 topic=swd_limits。\n"
+        "  ② 热点占比（免插桩、不停机）——trace_pcsample；要更确定的分布用 trace_profile\n"
+        "     （后者每次采样都 halt→读PC→resume，破坏实时性）。详见 topic=swd_limits。\n"
+        "  ③ 函数进入/退出（免插桩、**要停机**、受 FPB 槽位限制）——trace_record\n"
+        "     不用链任何组件；代价：每次命中 halt→读寄存器→resume，高频短函数会拖慢并丢事件。"
+        "详见 topic=swd_limits。\n"
+        "  ④ Event Recorder（插桩、不停机、要有 SCVD 才有名字）——trace_eventrec\n"
+        "     前提：工程链了 CMSIS EventRecorder 并真调了 EventRecordXxx，不是自动捕获。"
+        "详见 topic=swd_limits。\n"
+        "  ⑤ RTT（插桩、不停机、可离线 Viewer）——trace_rtt_attach → trace_rtt_read / trace_rtt_write → trace_rtt_detach\n"
+        "     前提：目标里链了 SEGGER RTT 组件；只依赖内存读写，不依赖 ocd 的 rtt 命令。"
+        "详见 topic=rtt_notes。\n"
+        "  ⑥ 插桩事件流（插桩、不停机、按「事件什么时候离开芯片」分三个后端）——\n"
+        "     stream：trace_swo_start → trace_swo_read（要 SWO 引脚；带宽最高、时间戳最准）；\n"
+        "     buff：trace_buff_status → trace_buff_dump（全速录、事后一次读回；写满覆盖最旧）；\n"
+        "     swd：trace_swd_status → trace_swd_read（压缩入环 + 背压不覆盖；只有两线也能不丢）。\n"
+        "     三者共用同一份插桩代码，只改 MDK_TRACE_BACKEND_* 重编切换，"
+        "详见 topic=instrument_modes。\n"
+        "硬边界（不许越界承诺）：\n"
+        "  · 「全自动、无损、每跳都记」= ETM 并行 trace 口或 SWO 指令 trace，SWD 两线做不到"
+        "（topic=swd_limits）；\n"
+        "  · 时间粒度怎么切、为什么调粗反而录得更久 → topic=time_granularity；\n"
+        "  · 插桩点怎么选（ID 复用；工作集超过 64 槽字典会退化到 11.3 字节/事件）"
+        " → topic=instrument_points；\n"
+        "  · 连不上 / 没数据时的排查顺序 → topic=when_unavailable；\n"
+        "  · 两条链路（Keil 侧 / OpenOCD 侧）怎么切、为什么不悄悄换 → topic=links；\n"
+        "  · swd 无缝流为什么会丢、丢了多少怎么读 → topic=swd_seamless。\n"
+        "**别把状态工具当成采集工具**——四者各看一层，互不替代：\n"
+        "  · trace_status        跨后端的会话总览（mode / 当前链路 / 计数器 / 解码器统计）；\n"
+        "  · trace_swd_status    swd 后端那 80 字节控制块（环容量 / 未读 / 丢失 / 压缩比）；\n"
+        "  · trace_buff_status   buff 后端的控制块（容量 / 已录 / 丢了多少 / 是否回卷）；\n"
+        "  · trace_eventrec(action=status)  Event Recorder 录制器自己的状态（协议版本 / 条数 / 写指针）。\n"
+        "  采集入口只有三组：trace_swo_read / trace_buff_dump / trace_swd_read"
+        "（Event Recorder 用 trace_eventrec(action=read|stats)）。"
+    ),
     "howto": (
+        "六条通路的全表（前提 / 代价 / 详见哪个主题）见 topic=routes；"
+        "下面只讲 SWO 与 RTT 这两条的细节。\n"
         "三条通路的取舍：\n"
         "  SWO（要 SWO 引脚）：带宽最高、时间戳最准，能拿 ITM 打印 + 硬件事件（异常/PC 采样/数据 trace）。"
         "走 trace_swo_start → 目标跑起来 → trace_swo_read。\n"
@@ -4619,7 +4661,11 @@ def register(server, js=None) -> int:
             "一眼看清当前 trace 在干什么：mode（swo/rtt/profile）、已采集字节与报文数、"
             "MTF 帧数、**CRC 错与丢弃字节数**（这两个数 >0 就说明事件不全，"
             "不能把时间线当完整证据）、剩余未解析字节。"
-            "RTT 模式下还会给 attach 的地址与通道统计。"
+            "RTT 模式下还会给 attach 的地址与通道统计。\n"
+            "**这是跨后端的会话总览**（mode / 当前链路 / 计数器 / 解码器），"
+            "不是某个后端自己的环：swd → trace_swd_status、buff → trace_buff_status、"
+            "Event Recorder → trace_eventrec(action=status)；通路全表见 "
+            "trace_guide(topic=routes)。"
         ),
     )
     async def trace_status() -> str:
@@ -4663,7 +4709,9 @@ def register(server, js=None) -> int:
             "带出默认值。ports 默认 \"0,1\"（0 一般是 printf 的 ITM 通道，"
             "1 留给结构化事件）。\n"
             "**前提**：探针支持 SWO 且 SWO 引脚已接；目标侧跑我们的插桩组件"
-            "（components/trace）才有人往 ITM 里写。开始后用 trace_swo_read 增量取。"
+            "（components/trace）才有人往 ITM 里写。开始后用 trace_swo_read 增量取。\n"
+            "**没有 SWO 引脚时别停在这条上**：buff 后端 trace_buff_status、swd 后端 "
+            "trace_swd_status 都只要 SWD 两线（全表见 trace_guide(topic=routes)）。"
         ),
     )
     async def trace_swo_start(file: str = "", coreclk: int = 0, baud: int = 0,
@@ -4825,7 +4873,9 @@ def register(server, js=None) -> int:
             "返回 up（目标→主机，日志/事件）与 down（主机→目标，命令）通道列表，"
             "含缓冲大小与当前读写指针。**只依赖内存读写**，不依赖 OpenOCD 的 rtt 命令"
             "——RISC-V/Xtensa 目标上这条路照样通。\n"
-            "link 选内存通路：auto（默认）/ keil / ocd；挂上后 rtt_read/rtt_write 沿用这条链路。"
+            "link 选内存通路：auto（默认）/ keil / ocd；挂上后 rtt_read/rtt_write 沿用这条链路。\n"
+            "**这要目标里链了 RTT 组件**；改不动代码时走 trace_scope_start / trace_pcsample / "
+            "trace_record（全表见 trace_guide(topic=routes)）。"
         ),
     )
     async def trace_rtt_attach(addr: str = "", size: int = 0, elf: str = "",
@@ -4900,7 +4950,10 @@ def register(server, js=None) -> int:
             "（require_halt=true），就必须改用 RTT/ITM 让目标自己推数据。\n"
             "指令级 CPU 录制（每一跳都记下来）需要 ETM 并行 trace 口，**SWD 两线做不到**。\n"
             "**这条两条链路通用**：Keil 侧先在调试会话里 enter_debug，OpenOCD 侧先 ocd_start；"
-            "link 可显式指定 auto/keil/ocd。"
+            "link 可显式指定 auto/keil/ocd。\n"
+            "**别用错通路**：这条只看变量；要函数进入/退出用 trace_record、"
+            "要热点占比用 trace_pcsample、要插桩事件流用 ⑥ 的三组"
+            "（全表见 trace_guide(topic=routes)）。"
         ),
     )
     async def trace_scope_start(vars: str = "", elf: str = "",
@@ -4958,7 +5011,9 @@ def register(server, js=None) -> int:
             "**如果采样器不工作会明确报错**（sampler_inactive / 值不变），"
             "不会给一份看着像样的分布——部分 Cortex-M 修订版上 PC 采样器确实不可用。\n"
             "样本是「采样器最近一次采到的 PC」，同一值会被重复读到，占比仅供参考；"
-            "默认采样结束会恢复 DEMCR/DWT_CTRL 原值。"
+            "默认采样结束会恢复 DEMCR/DWT_CTRL 原值。\n"
+            "**这是「整体热点占比」这一条**：要函数进入/退出成对事件用 trace_record，"
+            "要变量时间线用 trace_scope_start（全表见 trace_guide(topic=routes)）。"
         ),
     )
     async def trace_pcsample(samples: int = 500, interval_ms: float = 10.0,
@@ -4986,7 +5041,9 @@ def register(server, js=None) -> int:
             "**明确标注为侵入式**：每条样本都中断了目标，实时性被破坏，"
             "返回里的 warning 和 intrusive=true 别忽略——结论只能用于"
             "「热点大概在哪」，不能当精确耗时。要做真实耗时请用 DWT CYCCNT"
-            "（trace_dwt_counters 看计数，目标侧用组件里的计时宏）。"
+            "（trace_dwt_counters 看计数，目标侧用组件里的计时宏）。\n"
+            "**它会 halt 目标**：改不动代码又不许停机的场合改用 trace_pcsample "
+            "（全表见 trace_guide(topic=routes)）。"
         ),
     )
     async def trace_profile(samples: int = 200, elf: str = "",
@@ -5107,7 +5164,10 @@ def register(server, js=None) -> int:
             "**定位**：默认按 ELF 符号 mdk_trace_buff_blob 找（elf= 或会话已 set_symbol_file 的可省），"
             "也可以 addr=0x... 直接给。找不到符号会明确报 buff-symbol-missing，不会猜。\n"
             "**读回整片 0 不等于缓冲是空的**：目标全速运行时经 SWD 读 RAM 可能整片读回 0，"
-            "这种情况会报 buff-read-degenerate 并让你先停下目标再读。"
+            "这种情况会报 buff-read-degenerate 并让你先停下目标再读。\n"
+            "**分工**：这里只报 buff 后端自己的控制块；要看跨后端的整体状态用 "
+            "trace_status，swd 后端看 trace_swd_status。通路全表见 "
+            "trace_guide(topic=routes)。"
         ),
     )
     async def trace_buff_status(elf: str = "", addr: str = "",
@@ -5180,7 +5240,10 @@ def register(server, js=None) -> int:
             "也可以 addr=0x... 直接给；找不到会明确报 swd-symbol-missing，不会猜。\n"
             "**读回整片 0 不等于没事件**：目标全速运行时经 SWD 读 RAM 可能整片读回 0，"
             "这种情况会报 swd-read-degenerate 并让你先 halt；停一下不会丢数据。\n"
-            "pending 接近 cap 时会在 warnings 里提醒：宿主再跟不上，目标就要开始丢事件了。"
+            "pending 接近 cap 时会在 warnings 里提醒：宿主再跟不上，目标就要开始丢事件了。\n"
+            "**分工**：这里只报 swd 后端自己的控制块（环容量 / 游标 / 丢了多少 / 压缩比）；"
+            "要看跨后端的整体状态用 trace_status（更全但更粗），"
+            "buff 后端看 trace_buff_status。通路全表见 trace_guide(topic=routes)。"
         ),
     )
     async def trace_swd_status(elf: str = "", addr: str = "",
