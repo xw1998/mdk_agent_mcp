@@ -371,13 +371,13 @@ def section_e():
         SV.create_server(port=15881, toolsets="all").list_tools())]
     core_names = [t.name for t in asyncio.run(
         SV.create_server(port=15881, toolsets="core").list_tools())]
-    check("E1 注册总数 225（本批不新增）", len(all_names) == 225, len(all_names))
-    check("E2 build 组 38（批次87/88 +2）且含批次80 两个工具",
-          len(TB.TOOLSETS["build"]) == 38
+    check("E1 注册总数 231（本批不新增）", len(all_names) == 231, len(all_names))
+    check("E2 build 组 44（批次87/88 +2）且含批次80 两个工具",
+          len(TB.TOOLSETS["build"]) == 44
           and {"recover_project_exact", "recover_verify"} <= set(TB.TOOLSETS["build"]),
           len(TB.TOOLSETS["build"]))
     check("E3 默认面仍是 45（新工具不进默认面）", len(core_names) == 45, len(core_names))
-    check("E4 收起后 180", len(all_names) - len(core_names) == 180,
+    check("E4 收起后 186", len(all_names) - len(core_names) == 186,
           len(all_names) - len(core_names))
     check("E5 两个工具登记为会改/非幂等，但不进不可逆",
           {"recover_project_exact", "recover_verify"} <= set(AN.MUTATING)

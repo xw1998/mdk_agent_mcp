@@ -120,6 +120,10 @@ READONLY = {
     "recover_datatable", "recover_stack",
     # 批次105：字节/文本搜索与交叉引用——只读文件字节，不写文件、不碰目标。
     "recover_search", "recover_xref",
+    # 批次107：还原 C 的四个只读环节——plan/status 只解析镜像与结果目录，
+    # 只有显式给 out 才落一份 JSON（同 image_split 的口径）；c_context 只读
+    # 镜像并组证据包；c_check 默认只读源码/镜像，只有显式给 state 才记轮次。
+    "recover_plan", "recover_status", "recover_c_context", "recover_c_check",
 }
 
 # ----------------------------------------------------------------------
@@ -175,6 +179,9 @@ NON_IDEMPOTENT = {
     "dump_memory",
     # 点表探测器给 out 会写 JSON；而且「再采 8 次」与「采 8 次」本身不等价。
     "modbus_pointmap",
+    # 批次107：还原 C 的两个重环节——c_build 落临时目录并真的跑工具链（重跑
+    # 产出可能不同），c_emulate 跑一段模拟并把内存写入扔掉（同样「重跑 ≠ 只跑一次」）。
+    "recover_c_build", "recover_emulate",
     "scatter_edit", "core_select",
     "restart_keil", "reset_connection", "trace_swo_start", "trace_swo_stop",
     "trace_profile", "profile_function", "profile_sampling",
@@ -224,6 +231,9 @@ MUTATING = {
     "watchdog_freeze", "write_mem", "write_peripheral",
     # 批次106：写变量改目标内存；转储写本地文件；点表探测占串口并发请求。
     "write_variable", "dump_memory", "modbus_pointmap",
+    # 批次107：c_build 会写临时目录并调用本机工具链；c_emulate 起一段模拟
+    # （不改目标，但会消耗 CPU 并产生一次可观察的运行，不属只读）。
+    "recover_c_build", "recover_emulate",
     # 批次49：函数运行时线录制会下/撤硬件断点并 halt/resume 目标；
     # D-Cache 维护会写 SCB 的 DCCMVAC/DCIMVAC（不改用户数据，但确实写目标状态）。
     "trace_record", "dcache_maintain",

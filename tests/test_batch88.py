@@ -330,16 +330,16 @@ def section_e():
     from mdkdebug import server as SV
     srv = SV.create_server(port=15981, toolsets="all")
     tools = {t.name: t for t in asyncio.run(srv.list_tools())}
-    check("E1 注册总数 225（批次88 +1）", len(tools) == 225, len(tools))
+    check("E1 注册总数 231（批次88 +1）", len(tools) == 231, len(tools))
     props = (tools.get("recover_ledger").input_schema.get("properties") or {})
     check("E2 参数齐全（project_dir/image/base/verify_json/arm_bin/skip_build/窗口）",
           all(k in props for k in ("project_dir", "image", "base", "verify_json",
                                    "arm_bin", "skip_build", "via_uvprojx",
                                    "flash_start", "flash_size", "ram_start",
                                    "ram_size")), sorted(props))
-    check("E3 在 build 组（38 个）、不在默认面",
+    check("E3 在 build 组（44 个）、不在默认面",
           "recover_ledger" in SV._toolbox.TOOLSETS.get("build", set())
-          and len(SV._toolbox.TOOLSETS.get("build", ())) == 38
+          and len(SV._toolbox.TOOLSETS.get("build", ())) == 44
           and "recover_ledger" not in {t.name for t in
                                        asyncio.run(SV.create_server(port=15980).list_tools())},
           len(SV._toolbox.TOOLSETS.get("build", ())))

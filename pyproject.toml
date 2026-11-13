@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "mdkdebug"
-version = "0.2.30"
+version = "0.2.31"
 description = "可被 AI 工具调用的 Keil uVision 调试服务（MCP Server）——UVSOCK 在线调试 + UV4 编译烧录闭环"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -37,6 +37,11 @@ dependencies = [
     "tree-sitter-c>=0.24",
     "tree-sitter-cpp>=0.23",
 ]
+
+# 可选依赖（批次107）。**不装也能用**：recover_emulate 在缺失时如实报
+# supported=false 并给出安装提示，绝不降级成静态猜测（同 tree-sitter 的口径）。
+[project.optional-dependencies]
+emu = ["unicorn>=2.0"]
 
 [project.scripts]
 mdkdebug = "mdkdebug.cli:main"

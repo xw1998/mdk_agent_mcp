@@ -81,8 +81,8 @@ def section_a():
     check("A1 三个新工具都注册了",
           all(n in names for n in NEW_TOOLS),
           [n for n in NEW_TOOLS if n not in names])
-    check("A2 注册总数 225（本批新增 3 个，批次105 后为 222）",
-          len(names) == 225, len(names))
+    check("A2 注册总数 231（本批新增 3 个，批次105 后为 222）",
+          len(names) == 231, len(names))
     check("A3 分组数量对（core 39 / mem 12 / serial 15）",
           len(TB.TOOLSETS["core"]) == 39 and len(TB.TOOLSETS["mem"]) == 12
           and len(TB.TOOLSETS["serial"]) == 15,
@@ -426,14 +426,12 @@ def section_e():
     check("E5 README 三个新工具都出现在工具表里",
           all(("`%s`" % n) in rd for n in NEW_TOOLS),
           [n for n in NEW_TOOLS if ("`%s`" % n) not in rd])
-    check("E6 README 目录树版本号 0.2.30", "版本号 0.2.30" in rd,
-          re.findall(r"版本号 0\.2\.\d+", rd))
-
     from mdkdebug import __version__ as V
+    check("E6 README 目录树版本号与包一致",
+          ("版本号 %s" % V) in rd, (V, re.findall(r"版本号 0\.2\.\d+", rd)))
     py = open(os.path.join(ROOT, "pyproject.toml"), encoding="utf-8").read()
     check("E7 版本三处同步（__init__ / pyproject / README）",
-          V == "0.2.30" and ('version = "%s"' % V) in py
-          and ("版本号 %s" % V) in rd, (V,))
+          ('version = "%s"' % V) in py and ("版本号 %s" % V) in rd, (V,))
     rt = open(os.path.join(ROOT, "tools", "run_all_tests.py"), encoding="utf-8").read()
     check("E8 全量闸门里含 test_batch106", '"test_batch106"' in rt)
 

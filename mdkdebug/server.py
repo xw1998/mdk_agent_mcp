@@ -81,6 +81,11 @@ from . import locate as _locate
 from . import writevar as _writevar   # 批次106：按变量名写的编码与宽度校验
 from . import memdump as _memdump     # 批次106：区间分块转储
 from . import pointmap as _pointmap   # 批次106：Modbus 多次采样点表
+from . import plan as _plan             # 批次107：还原计划与覆盖状态
+from . import contextpack as _ctxpack   # 批次107：单函数「写 C 的证据包」
+from . import ccheck as _ccheck         # 批次107：候选 C 的结构体检
+from . import cbuild as _cbuild         # 批次107：回编译后的指令序列比对
+from . import emulate as _emulate       # 批次107：Unicorn 行为 oracle（可选依赖）
 from . import textio as _textio
 
 logger = logging.getLogger("mdkdebug.server")
@@ -8417,6 +8422,216 @@ def create_server(host: str = "127.0.0.1", port: int = 4823,
             if out.get("ok"):
                 out.pop("_unit", None)
             return _js(out)
+        except Exception as e:  # noqa: BLE001
+            return _js({"ok": False, "error": str(e)})
+
+    @server.tool(
+        name="recover_plan",
+        title="固件逆向：还原计划（依赖序 + 难度分档 + 分批）",
+        description=(
+            "出一份**可执行的还原清单**：函数按「被调者先做」的依赖序排列，带难度分档、"
+            "排除项与分批，另有身份指纹（镜像 sha256 + 工具版本 + 基址）。\n"
+            "为什么需要它：从哪个函数开始是最难的一步。按地址做，第一个函数就在调还没写的"
+            "函数；按依赖序做，叶子先做，每一步的产物都能直接编译。\n"
+            "order=dependency（默认，post-order DFS，环里的函数标 cycle 并排到最后）/ "
+            "easiest-first / high-impact（按调用者数）。batch 是分批大小（默认 8，0=不分批）。\n"
+            "exclude 默认 thunk,trivial（thunk 只有一条跳转；常量返回/stub 体积 ≤8 字节）"
+            "；给 none 表示都不排除。library 是逗号分隔的名字通配（如 __aeabi_*,memcpy*），"
+            "**只按名字不按指纹**，默认空。\n"
+            "体积口径：优先符号表 size；size=0（ARM 库函数很常见）用「下一个函数入口−本入口」"
+            "兜底并在 size_basis 里写明是 symtab 还是 gap。\n"
+            "给 out 就落 plan.json（utf-8 无 BOM，带 evidence_only；拒绝写进构建目录）。\n"
+            "限制：依赖边只认直接调用且目标落在已知函数入口上——间接调用与库函数不算边，"
+            "这些会计进 gaps，所以依赖序可能不完整；环内顺序没有意义。"
+        ),
+    )
+    async def recover_plan(path: str, base: str | int = 0, order: str = "dependency",
+                           batch: int = 8, exclude: str = "thunk,trivial",
+                           library: str = "", limit: int = 0, out: str = "",
+                           deep: bool = True, max_functions: int = 0,
+                           max_insns: int = 0) -> str:
+        try:
+            o = _plan.build(str(path or "").strip(), base=_pi(base, "base", 0),
+                            order=str(order or "dependency"), batch=int(batch if batch is not None else 8),
+                            exclude=str(exclude or ""), library=str(library or ""),
+                            limit=int(limit or 0), out=str(out or "").strip(),
+                            deep=bool(deep), max_functions=int(max_functions or 0),
+                            max_insns=int(max_insns or 0))
+            return _js(o)
+        except Exception as e:  # noqa: BLE001
+            return _js({"ok": False, "error": str(e)})
+
+    @server.tool(
+        name="recover_status",
+        title="固件逆向：还原覆盖（五态 + stale）",
+        description=(
+            "读 recover_plan 出的 plan.json 与一个结果目录，报**覆盖**："
+            "unattempted / attempted（只有 .c）/ accepted（判词通过）/ failed（判词不通过）"
+            "/ stale（镜像或工具版本变了，整条计划过期）。\n"
+            "结果文件怎么认：文件名用 <addr_hex> 或 <函数名>，后缀 .c / .check.json / "
+            ".build.json / .result.json 都行（也认 <addr>__<name> 的写法，可分子目录）。"
+            "判词从 JSON 的 verdict 字段读：accepted 收 structural_match / exact_sequence / "
+            "no_obvious_mismatch；failed 收 strong_mismatch / weak_mismatch / differs / build_failed。\n"
+            "stale 的判据：current 给的镜像 sha256 与计划里的不同、基址变了、或工具版本变了。"
+            "宁可让你重做，也不让一份看起来齐活、其实对不上号的清单混过去。\n"
+            "给 out 落 status.json。限制：覆盖只描述这份计划里的函数，不代表整个程序；"
+            "状态来自文件与判词，不证明语义等价。只读（除 out）。"
+        ),
+    )
+    async def recover_status(plan: str, results_dir: str = "", out: str = "",
+                             current: str = "", base: str | int = 0) -> str:
+        try:
+            o = _plan.status(str(plan or "").strip(), str(results_dir or "").strip(),
+                             out=str(out or "").strip(),
+                             current=str(current or "").strip(),
+                             base=_pi(base, "base", 0))
+            return _js(o)
+        except Exception as e:  # noqa: BLE001
+            return _js({"ok": False, "error": str(e)})
+
+    @server.tool(
+        name="recover_c_context",
+        title="固件逆向：单函数「写 C 的证据包」",
+        description=(
+            "把一个函数的所有可用证据**按同一个函数对齐**放在一起，供宿主 AI 写等价的 C："
+            "反汇编（带机器码、调用目标已解析成名字）+ 伪 C + 调用者/被调用者 + 栈槽位表 + "
+            "结构体候选（基址寄存器未知的访存按 base_reg+offset 聚合）+ 字面量字符串 + "
+            "DWARF 的文件/行号 + gaps（五类缺口）+ next_actions。\n"
+            "target 给地址（可带 Thumb 位），或 symbol 给**精确**函数名（模糊匹配只用于报错提示）。\n"
+            "gaps 的类别固定：unavailable（镜像里没有）/ unsupported（有但本工具不做，"
+            "比如 DWARF 的参数类型）/ query_failed / unresolved_call（间接调用解不出目标）/ "
+            "limit（撞到 max_insns 或 max_chars）。缺口必须逐条看——少一句「不知道」，"
+            "写出来的 C 就会多一个瞎编的 int。\n"
+            "max_chars 是文本上限：超了先裁反汇编尾巴（保留前 40 条）再裁伪 C，并记一条 limit。\n"
+            "限制：伪 C 是寄存器级 lifting（表达式与控制流保真，类型/名字是推断）；"
+            "函数边界到终止指令为止，尾调用/内联会让边界与源码不一致。只读工具。"
+        ),
+    )
+    async def recover_c_context(path: str, target: str | int = 0, symbol: str = "",
+                                base: str | int = 0, max_chars: int = 60000,
+                                max_insns: int = 2000, include_c: bool = True,
+                                include_asm: bool = True) -> str:
+        try:
+            o = _ctxpack.pack(str(path or "").strip(), target=_addr_arg(target),
+                              symbol=str(symbol or ""), base=_pi(base, "base", 0),
+                              max_chars=int(max_chars or 60000),
+                              max_insns=int(max_insns or 2000),
+                              include_c=bool(include_c), include_asm=bool(include_asm))
+            return _js(o)
+        except Exception as e:  # noqa: BLE001
+            return _js({"ok": False, "error": str(e)})
+
+    @server.tool(
+        name="recover_c_check",
+        title="固件逆向：候选 C 的结构体检（只报强不匹配）+ 修错轮次",
+        description=(
+            "把候选 C 里能数出来的结构量（调用数/循环/if/switch/返回/常量返回/浮点/NaN/"
+            "stub 标记/行数）与镜像里这段函数的汇编（bl 数/分支数/回边/VFP 指令/push 寄存器数）"
+            "摆在一起比，**只在强证据时判失败**。\n"
+            "判词三档：strong_mismatch（汇编 6 条指令以内却在源码里调了一堆/源码只返回常量而"
+            "汇编几十条/汇编有 bl 而源码 0 次调用/汇编有回边而源码没循环/汇编用 VFP 而源码没浮点/"
+            "几十条指令配 3 行 stub）、weak_mismatch（调用数差 3+、分支与源码结构差一个量级、"
+            "源码里有 TODO 但函数体不小）、no_obvious_mismatch（**不是**「等价」）。\n"
+            "signals 逐条给 severity 与说明，照着改比看总判词有用。\n"
+            "state 给一个 JSON 路径时启用修错环计数：每调用一次 +1，超过 max_attempts（默认 6）"
+            "直接返回 attempt_budget_exhausted——同一函数不许无限重试烧预算。\n"
+            "源码用 source（.c 文件路径）或 code（直接给文本）。限制：正则级统计，"
+            "宏/模板/内联展开会漏；这是结构体检不是等价性证明。"
+        ),
+    )
+    async def recover_c_check(path: str, source: str = "", code: str = "",
+                              target: str | int = 0, symbol: str = "",
+                              base: str | int = 0, state: str = "",
+                              max_attempts: int = 6) -> str:
+        try:
+            o = _ccheck.check(str(path or "").strip(), source=str(source or ""),
+                              base=_pi(base, "base", 0), target=_addr_arg(target),
+                              symbol=str(symbol or ""), code=str(code or ""),
+                              state=str(state or "").strip(),
+                              max_attempts=int(max_attempts or 6))
+            return _js(o)
+        except Exception as e:  # noqa: BLE001
+            return _js({"ok": False, "error": str(e)})
+
+    @server.tool(
+        name="recover_c_build",
+        title="固件逆向：候选 C 回编译 + 指令序列结构比对",
+        description=(
+            "用**原来的 ARM 工具链**（AC5 armcc / AC6 armclang）把候选 C 编成 .o，按符号定位"
+            "到函数体，反汇编后与镜像里的目标函数做结构比对。\n"
+            "判词：exact_sequence（规范化指令序列逐条相同）/ structural_match（助记符多重集相同，"
+            "或相似度 ≥ threshold 且调用数相同、分支数差 ≤1、push 寄存器数相同）/ differs（附第一条"
+            "分歧与 unified diff）/ build_failed（附编译器原始 stderr）。\n"
+            "为什么要它：静态体检只能说「写得像」，回编译能说「编出来是不是同一段机器码」——"
+            "这是纯分析型工具给不出的能力。\n"
+            "compiler=auto（优先 AC6）/ ac5 / ac6；cpu 默认 cortex-m4 并在输出里标 cpu_is_default；"
+            "opt 默认 -O2（换 -O0/-O1/-Os 再看一次很值得：不同 -O 档编出来的序列差别很大）。"
+            "includes 逗号分隔加 -I。work_dir 可指定临时目录，keep 决定是否保留 .c/.o 便于排查。\n"
+            "**结构相同不等于语义等价**：寄存器分配与指令选择能让不同源码编出同一段码，"
+            "同一段码也可能来自不同源码；换个 -O 档也可能就不一样了。\n"
+            "限制：REL 目标文件没有绝对地址，比对前会把立即数/地址抹平；只比**一个**函数"
+            "（同名优先，否则取最大的 .text 节）。"
+        ),
+    )
+    async def recover_c_build(path: str, source: str = "", code: str = "",
+                              target: str | int = 0, symbol: str = "",
+                              base: str | int = 0, compiler: str = "auto",
+                              cpu: str = "", opt: str = "-O2", includes: str = "",
+                              work_dir: str = "", keep: bool = False,
+                              threshold: float = 0.8) -> str:
+        try:
+            o = _cbuild.build(str(path or "").strip(), source=str(source or ""),
+                              base=_pi(base, "base", 0), target=_addr_arg(target),
+                              symbol=str(symbol or ""), code=str(code or ""),
+                              compiler=str(compiler or "auto"), cpu=str(cpu or ""),
+                              opt=str(opt or "-O2"), includes=str(includes or ""),
+                              work_dir=str(work_dir or "").strip(), keep=bool(keep),
+                              threshold=float(threshold if threshold is not None else 0.8))
+            return _js(o)
+        except Exception as e:  # noqa: BLE001
+            return _js({"ok": False, "error": str(e)})
+
+    @server.tool(
+        name="recover_emulate",
+        title="固件逆向：Unicorn 行为 oracle（跑原机器码 / 两镜像差分）",
+        description=(
+            "把镜像的可执行段映射进 Unicorn，设好 r0..r3 与栈，从函数入口跑一段，"
+            "返回 r0..r3、写过的内存、以及**停下来的原因**（returned / instruction_budget / "
+            "peripheral_access / unmapped_access / error）。\n"
+            "静态分析回答不了「它到底做了什么」，这一层回答。给 reference 时进差分模式："
+            "两个镜像同一组输入，比返回值与内存写序列（same_return / same_writes + 差异清单）。\n"
+            "args 是逗号分隔的整数（可 0x 前缀），依次进 r0..r3；entry 给地址或 symbol 给精确函数名。\n"
+            "**Unicorn 是可选依赖**：没装就 supported:false 并给安装命令（pip install unicorn），"
+            "不降级成静态猜测。\n"
+            "**外设不可模拟**：碰到 0x40000000–0x5FFFFFFF 的访问会停下来记 peripheral_access——"
+            "不假装跑完（否则「返回 0」会被读成「函数返回 0」）。\n"
+            "限制：只执行你给的那段码，不进中断、不等 DMA、不建模 FPU 上下文；"
+            "跑通不等于正确，差分只在这一组输入上成立。"
+        ),
+    )
+    async def recover_emulate(path: str, entry: str | int = 0, symbol: str = "",
+                              base: str | int = 0, reference: str = "",
+                              base_reference: str | int = 0, args: str = "",
+                              max_insns: int = 20000, stack: int = 4096,
+                              ram: int = 65536, timeout_us: int = 2000000) -> str:
+        try:
+            if str(reference or "").strip():
+                o = _emulate.diff(str(path or "").strip(),
+                                  reference=str(reference or "").strip(),
+                                  entry=_addr_arg(entry), base=_pi(base, "base", 0),
+                                  base_reference=_pi(base_reference, "base_reference", 0),
+                                  args=str(args or ""), symbol=str(symbol or ""),
+                                  max_insns=int(max_insns or 20000),
+                                  stack=int(stack or 4096), ram=int(ram or 65536),
+                                  timeout_us=int(timeout_us or 2000000))
+            else:
+                o = _emulate.run(str(path or "").strip(), entry=_addr_arg(entry),
+                                 base=_pi(base, "base", 0), args=str(args or ""),
+                                 symbol=str(symbol or ""),
+                                 max_insns=int(max_insns or 20000),
+                                 stack=int(stack or 4096), ram=int(ram or 65536),
+                                 timeout_us=int(timeout_us or 2000000))
+            return _js(o)
         except Exception as e:  # noqa: BLE001
             return _js({"ok": False, "error": str(e)})
 

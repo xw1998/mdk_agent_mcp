@@ -121,6 +121,11 @@ TOOLSETS = {
         # 批次105：定位线——「这段字节在哪」与「谁在用它」。两者都只读、只解析文件字节，
         # 属逆向场景，同样不进默认面。
         "recover_search", "recover_xref",
+        # 批次107：还原 C 的闭环——计划/进度/证据包/静态核对/回编译比对/行为模拟。
+        # 前四个默认只读（只有显式给 out/state 才落盘），后两个会落临时目录、跑本机
+        # 工具链或起一段模拟；属逆向场景，全部不进默认面。
+        "recover_plan", "recover_status", "recover_c_context",
+        "recover_c_check", "recover_c_build", "recover_emulate",
     },
     "serial": {
         "serial_list_ports", "serial_monitor_start", "serial_monitor_status",

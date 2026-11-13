@@ -239,7 +239,7 @@ mdk_agent/
 ├── requirements.txt          # Python 依赖
 ├── README.md
 ├── mdkdebug/
-│   ├── __init__.py           # 包初始化（版本号 0.2.30）
+│   ├── __init__.py           # 包初始化（版本号 0.2.31）
 │   ├── cli.py                # 命令行入口（main，mdkdebug 命令）
 │   ├── uvsock.py             # UVSOCK 协议：命令码、VSET/AMEM/EXECCMD 打包与解析
 │   ├── interface.py          # TCP 物理接口层（含异步消息残留清理）
@@ -256,7 +256,7 @@ mdk_agent/
 │   ├── linkio.py             # 链路原语层：把「读/写内存、读核寄存器、停/走」从 Keil(UVSOCK) 与 OpenOCD 里抽出来
 │   ├── traceproto.py         # trace 协议：ITM 解码、MTF 帧格式与 CRC8
 │   ├── trace.py              # trace：SWO / RTT（主机侧自研）/ SWD 采样 / DWT / 插桩组件部署（观测类工具两条链路通用）
-│   └── server.py             # MCP Server 与 225 个工具定义
+│   └── server.py             # MCP Server 与 231 个工具定义
 ├── components/
 │   └── trace/                # 目标侧插桩组件（ITM / RTT / UART / BUFF 四后端，只依赖 CMSIS）
 │                             #   mdk_trace.[ch] / mdk_trace_rtt.[ch] / config 默认头 / CMakeLists / README
@@ -350,9 +350,9 @@ mdkdebug read_mem --arg addr=0x20000000 --arg n=16     # 省略 call 的简写
 
 ## 暴露的 MCP 工具
 
-共 **225** 个（**默认只暴露 45 个**，其余按需装载，见[工具面](#工具面默认精简--按需装载)），分两大块：
+共 **231** 个（**默认只暴露 45 个**，其余按需装载，见[工具面](#工具面默认精简--按需装载)），分两大块：
 
-- **MDK 族（134 个）**——调试读写 / 断点与命中等待 / 外设与内存 / 符号定位 / 工程分析 / **编译·清理·烧录** / **UV4 命令行批处理调试** / **CMSIS-SVD 解码** / **工程文件与分散加载文件(.sct)受控编辑** / **复位循环识别** / Keil 生命周期管理 / **宿主机串口日志与命令应答 · Modbus 主站（RTU/ASCII + 裸帧）** / **看门狗冻结与 Cache 感知** / 环境自检引导（下表）。
+- **MDK 族（143 个）**——调试读写 / 断点与命中等待 / 外设与内存 / 符号定位 / 工程分析 / **编译·清理·烧录** / **UV4 命令行批处理调试** / **CMSIS-SVD 解码** / **工程文件与分散加载文件(.sct)受控编辑** / **复位循环识别** / Keil 生命周期管理 / **宿主机串口日志与命令应答 · Modbus 主站（RTU/ASCII + 裸帧）** / **看门狗冻结与 Cache 感知** / 环境自检引导（下表）。
 - **非 MDK 族（82 个）**——**工具链**（gcc/make/cmake 探测与调用、构建、ELF/size/objcopy、编译错误解析，10 个）/ **目标档案与多核**（接口·速度·SWO·RTT 参数档案与自动识别、工程现场配置发现、多核目标的核列举与切换，7 个）/ **OpenOCD**（会话·内存·寄存器·断点·烧录，17 个）/ **trace 与覆盖率**（SWO·RTT·采样剖析·DWT·非侵入式 scope·插桩组件部署·**代码覆盖率**·**ETM 能力探测**·**函数运行时线录制**·**目标侧缓冲后端**·**SWD 无缝流后端**·**任务表取名**，38 个）/ **RTOS 任务感知**（任务列表·栈水位·队列信号量，3 个）/ **C 代码索引**（建/同步索引·符号检索·单符号源码体·文件清单·调用关系与影响面，7 个）——不依赖 Keil，同样能在 RISC-V / ESP32 等非 MDK 芯片上工作（见[非 MDK 芯片与 trace](#非-mdk-芯片与-trace不依赖-keil)）。
 - **常驻元工具（6 个）**——`toolset`（工具面按需装载）/ `list_tools` / `capabilities` / `get_version` / `tools_groups` / `tools_load`：**永不被裁**，否则 AI 连工具清单都问不出来、也装不回来。
 - **RTOS 任务感知（3 个，已计在上面非 MDK 族里，单列只为讲清它跨两条链路）**——`rtos_info` / `rtos_tasks` / `rtos_objects`：FreeRTOS 的任务列表、状态、**栈水位**与队列/信号量。**跨两条链路**（有 Keil 会话走 UVSOCK，否则走 OpenOCD），因为「多任务卡死」既发生在 MDK 工程里也发生在 gcc 工程里（见 [RTOS 任务感知](#rtos-任务感知rtos_3-个)）。
@@ -691,13 +691,13 @@ target_guess(elf) → ocd_start(profile=...) → ocd_flash(file=...) → trace_i
 
 ### 工具面（默认精简 + 按需装载）
 
-225 个工具全量塞进上下文会稀释注意力、也吃掉上下文预算。所以**默认只暴露 45 个**（`core` 组 39 个 + 6 个元工具），其余 180 个**没被删掉、也没失效**，用 `toolset` 工具随时装回来：
+231 个工具全量塞进上下文会稀释注意力、也吃掉上下文预算。所以**默认只暴露 45 个**（`core` 组 39 个 + 6 个元工具），其余 186 个**没被删掉、也没失效**，用 `toolset` 工具随时装回来：
 
 ```text
 toolset(action="status")                        # 装了哪些组、收起多少个、怎么装回来
 toolset(action="load",   toolsets="mem,rtos")   # 追加装载（幂等，可反复调）
 toolset(action="unload", toolsets="trace")      # 收起
-toolset(action="load",   toolsets="all")        # 一次全装 225 个（=full/*）
+toolset(action="load",   toolsets="all")        # 一次全装 231 个（=full/*）
 ```
 
 装载也可以放在启动时：`MDKDEBUG_TOOLSETS=serial` 只留串口 14 个、`core,build`、`toolchain,target,ocd,trace` 把上百个 Keil 工具全收起来调非 MDK 芯片；`=all` 回到全开。**启动参数优先于环境变量**。
@@ -709,7 +709,7 @@ toolset(action="load",   toolsets="all")        # 一次全装 225 个（=full/*
 | `core` | 进出调试 / 运行控制 / 状态 / 跨会话状态 / 环境一致性体检、符号工程绑定、断点硬件残留校验、复位循环识别、可视化出图（39 个） |
 | `mem` | 内存与外设读写 / D-Cache 一致性维护（11 个） |
 | `symbol` | 符号与源码定位（7 个；`set_symbol_file`/`list_symbol_projects` 已上移 `core`） |
-| `build` | 编译 / 清理 / 烧录 / 工程配置 / 分散加载文件(.sct)受控编辑 / 固件契约预检、闭环验证 / 镜像取证 / 固件逆向（骨架/字节精确复刻/镜像切分/闭环台账/字符串池与死代码/两镜像逐函数差分/数据表导出/调用图栈深/字节与文本搜索/交叉引用）（38 个） |
+| `build` | 编译 / 清理 / 烧录 / 工程配置 / 分散加载文件(.sct)受控编辑 / 固件契约预检、闭环验证 / 镜像取证 / 固件逆向（骨架/字节精确复刻/镜像切分/闭环台账/字符串池与死代码/两镜像逐函数差分/数据表导出/调用图栈深/字节与文本搜索/交叉引用/**还原 C 闭环的六件（计划/证据包/核对/回编译/模拟）**）（44 个） |
 | `serial` | 宿主机串口监听与命令应答 + Modbus 主站（14 个） |
 | `advanced` | 诊断 / 剖析 / SVD / 工程编辑 / 复位循环识别等进阶能力（26 个） |
 | `toolchain` | 非 MDK：工具链探测 / 构建 / 编译 / ELF·size·objcopy / 编译错误解析（10 个） |
@@ -729,8 +729,8 @@ toolset(action="load",   toolsets="all")        # 一次全装 225 个（=full/*
 |---|---|---|---|---|
 | 默认（`core` 组 + 元工具，描述 `lean`） | 45 | 约 2.2 万 | **约 3.9 万**（−56%） | 不设环境变量 |
 | **`nano` 极简档**（自动用 `min` 描述档） | **19** | **约 6 千** | **约 1.5 万** | `MDKDEBUG_TOOLSETS=nano` 或 `toolset(toolsets="nano")` |
-| `all`（全装，描述默认 `lean`） | 225 | 约 10 万 | 约 20.2 万（−51%） | `toolset(toolsets="all")` |
-| `all` + `MDKDEBUG_DESC=min` | 225 | 约 6.6 万 | 约 16.7 万 | 工具全要，但描述只留一句摘要 |
+| `all`（全装，描述默认 `lean`） | 231 | 约 10 万 | 约 20.2 万（−51%） | `toolset(toolsets="all")` |
+| `all` + `MDKDEBUG_DESC=min` | 231 | 约 6.6 万 | 约 16.7 万 | 工具全要，但描述只留一句摘要 |
 | 上述任一档 + `MDKDEBUG_DESC=full` | — | 逐字节还原全文 | — | 要逐字完整说明时 |
 
 - **`nano` 档**不是「组」而是**档位**：它横跨 `core` / `build` / `trace` 三组，挑出 15 个最短入口（健康检查 / 编译烧录 / 进出调试 / 跑停 / 读写内存与变量 / 断点 / 读 trace / **取回完整说明的 `mdk_guide`**）**＋ 6 个元工具**，小上下文模型也能一次装全，之后再按需加装。
@@ -1780,6 +1780,19 @@ uVision 再打开就报错。批次97 把这条纪律做成**工具能执行的�
 > `changing`/`no_response` 五档，语义标 `unconfirmed`，不替你判定「这就是流量」）。
 > 三者都遵守本仓库的老规矩：**宁可报错也不给错答案**（不截断、不假装读到、不猜语义）。
 > `test_batch106` 盯着这条。
+> **批次107（0.2.31）：还原 C 的闭环——计划 / 证据包 / 核对 / 回编译 / 模拟**。此前逆向工具能
+> 回答「这段字节是什么、属于谁、像什么类型」，但**没人管「怎么把它写回 C」**：没有清单说先做
+> 哪个、没有一处把写 C 需要的证据打成一个包、写完没人核对、更没法验证「我写的 C 编出来是不是
+> 同一段码」。本批补六个工具，全部**在工具里干活、不调 LLM**（写 C 的是宿主 AI）：
+> `recover_plan`（按依赖序出计划，被调者先做，分批、标难度、写明为什么排除）→
+> `recover_c_context`（单函数证据包：汇编 / 伪 C / 栈槽 / 结构体候选 / 字符串 / 缺口五类）→
+> `recover_c_check`（候选 C 与这段汇编的结构体检，**只报强不匹配**，判词三态 + 轮次上限）→
+> `recover_c_build`（真调 armclang/armcc 编出来，指令序列级比对：`exact_sequence` /
+> `structural_match` / `differs`，并明写「结构相同 ≠ 语义等价」）→
+> `recover_emulate`（Unicorn 跑一段码看写了哪些内存，可选依赖，缺了严格报 unsupported）→
+> `recover_status`（回读结果目录，五态覆盖 + 镜像/版本变了就整条 stale）。
+> 两条硬口径：**「没抓到强不匹配」不等于等价**；**体积缺失时用入口间距兜底并显式标注
+> `size_basis`**，不把估计伪装成实测。`test_batch107` 盯着这条。
 
 
 ### 逆向语义层：字符串 / 死代码 / 两镜像差分 / 栈深 / 数据表（批次102）
@@ -1890,6 +1903,67 @@ uVision 再打开就报错。批次97 把这条纪律做成**工具能执行的�
 2. **向量表项的字段不是 `value`**：`vector_table()` 给的是 `handler_hex` + `name`（`Reset` /
    `NMI` / `HardFault`…），按 `value` 取会静默拿不到、于是 `in_vector_table` 恒为空——
    一个「永远说不是中断入口」的假答案。现在按 `handler_hex` 比，`addr` / `addr|1` 两种写法都认。
+
+### 还原 C 的闭环：计划 / 证据包 / 核对 / 回编译 / 模拟（批次107）
+
+逆向走到「函数清单 + 伪 C」之后，真正缺的是**工程化**：一颗 175 个函数的固件，先写哪个、
+写的时候手上要有什么、写完怎么知道没写错。六个工具串成一条闭环，**判词永远留有余地**。
+
+- **`recover_plan`（按依赖序出还原计划）**：`order=dependency` 用 post-order DFS 保证
+  **被调者先出现**（写一个函数之前它调的东西已经写过）；`easiest-first` 按体积/case 数/调用数
+  打分；`high-impact` 按被调用次数排。每条给 `size_bytes` + **`size_basis`**（`symtab` 用的是
+  符号表真值；`gap` 是入口间距兜底，可能偏大——**估计值不当实测值**）、`difficulty` 与理由、
+  `depends_on`、`cycle`、`batch`。`exclude=thunk,trivial`（默认）把「只有一条跳转」与
+  「几字节常量返回」从对象里剔掉并**逐条说明原因**；`library=memcpy*,__aeabi_*` 只按名字排除
+  （**不做指纹识别**，所以默认不启用）。`gaps` 里记账两类看不见的依赖：调用目标不落在任何
+  已知入口（库函数/间接调用）与「有 N 个函数在调用环里」——**看不见 ≠ 没有**。
+- **`recover_c_context`（单函数证据包）**：`target`（地址，Thumb 位写不写都认）或 `symbol`
+  （精确名）二选一。返回 `function`（参数/返回值是 AAPCS 推断，附 `arg_basis`）、`asm`
+  （带字节与目标地址）、`pseudo_c`（寄存器级 lifting，**类型与变量名是推断**）、`callers`/
+  `callees`（后者标 `in_image`）、`stack_slots`、`structs`（基址+偏移聚合出的成员候选，
+  含读写次数与数组元素宽度）、`strings`（引用到的可打印串）、`gaps`（五类词表：`unavailable` /
+  `unsupported` / `query_failed` / `unresolved_call` / `limit`）、`caveats`。
+  超 `max_chars` 时**先砍反汇编尾巴再砍伪 C**，每次裁剪都记一条 `limit` 缺口——
+  裁剪是可审计的，不是静默截断。
+- **`recover_c_check`（写完先自检）**：正则级数出源码的调用/循环/if/浮点/返回，与这段汇编的
+  bl 数、回边数、分支数、VFP 指令数对撞。**只有强证据判 `strong_mismatch`**
+  （如汇编 12 条 bl 而源码 0 次调用、汇编有回边而源码没有 for/while、汇编用 VFP 而源码没浮点）；
+  数值差 1~2 的一律 `weak_mismatch`；没抓到强项是 `no_obvious_mismatch`——**不是等价**。
+  给 `state` 时按轮次记账，超过 `max_attempts`（默认 6）直接返回 `attempt_budget_exhausted`
+  并带上历史判词——**不让同一个函数被无限重试烧掉预算**。
+- **`recover_c_build`（回编译比对）**：真跑 AC6 `armclang`（或 `compiler=ac5` 走 `armcc`），
+  按 `.text.<符号>` 取候选目标码，两边指令序列先抹平立即数再比。判词
+  `exact_sequence`（完全一致）/ `structural_match`（调用数、分支数±1、push 数全等，或助记符
+  相似度 ≥ `threshold` 且三者也对得上）/ `differs`（其余），并给两边指令数、`mnemonic_ratio`、
+  `first_diff` 与 unified diff（**候选地址已映射回原函数地址**，两边可比）。
+  工具链缺失时 `toolchain_not_found` + 安装提示；编不过时 `build_failed` + `stderr`——
+  两种都不是「比对通过」。
+- **`recover_emulate`（行为 oracle，可选依赖）**：Unicorn 只映射**可执行段**（数据段不映射，
+  读未映射地址会如实报 `unmapped_access`），跑到 `bx lr` 返回到哨兵为止，返回 r0..r3 与
+  写过的内存序列；碰到 `0x40000000~0x60000000` 的外设访问就停下并报 `peripheral_access`。
+  `diff(path, reference=...)` 用同一组参数跑两个镜像，比返回寄存器与写序列（典型用法：
+  候选实现 vs 原函数，或重编译固件 vs 原厂固件）。unicorn 缺失时严格
+  `supported=false` + `pip install unicorn`（或 `pip install "mdkdebug[emu]"`），
+  **不降级成静态猜测**。
+- **`recover_status`（还差多少、还算不算数）**：扫结果目录（递归、允许
+  `0x080030B0__main.c` 两段命名），每个函数归五态之一：`unattempted` / `attempted`（有 .c）/
+  `accepted`（判词在 `exact_sequence`/`structural_match`/`no_obvious_mismatch` 等接受集）/
+  `failed`（`differs`/`strong_mismatch`/`build_failed`/`weak_mismatch`——**没通过就不按通过算**）/
+  `stale`。`current=` 给当前镜像时比 `sha256`/`base`/工具版本，任一不同就**整条计划 stale**
+  ——旧结果对新镜像不成立，尤其是基址变过之后「名字对得上≠函数对得上」。
+
+三处**只有做的时候才会踩到**的口径与缺陷：
+
+1. **函数定义不是一次调用**（本批修）：源码统计用「标识符 + `(`」数调用，于是
+   `void HAL_GPIO_TogglePin(...)` 这个**定义**被数成 1 次调用，而镜像里它只有 6 条指令 ⇒
+   触发「汇编像常量返回、源码却在调人」这条强判据，把**正确**的候选判成 `strong_mismatch`
+   （真实假阳性）。现在先用 `_DEF_RE` 把定义处的名字抹成空格再数。
+2. **`size` 常常是 0**：`recover_functions` 对 ARM 库里的 `_printf_*` 之类给不出符号表体积，
+   于是「难度」和「要不要排除」都只能按**下一个入口减本入口**估——这就是 `size_basis=gap`
+   存在的理由，不标出来就会被当成真值用。
+3. **模拟「返回」要看 LR 写什么**：把 LR 写成 `SENTRY|1`（带 Thumb 位）会让 `bx lr` 跳到
+   `0xFFFFFFF1`，取指失败报 `UC_ERR_FETCH_UNMAPPED`，`stop_reason` 变成 `error` 而**看起来
+   像跑挂了**；现在 LR 写不带位的 `SENTRY`，`emu_start(begin, SENTRY)`，报 `returned`。
 
 ### 底层库
 
