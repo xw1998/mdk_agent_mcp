@@ -10,7 +10,7 @@ mdkdebug —— 可被 AI 工具调用的 Keil uVision 调试服务。
 `UVClient` / `uvsock` / `interface` 改成 PEP 562 惰性属性，用到才取。
 """
 
-__version__ = "0.2.32"
+__version__ = "0.2.33"
 
 __all__ = ["UVClient", "uvsock", "interface", "__version__"]
 

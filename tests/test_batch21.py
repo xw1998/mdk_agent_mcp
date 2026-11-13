@@ -156,13 +156,13 @@ async def main():
           "Update Target before Debugging" in tmap.get("enter_debug", "")
           and "自动" in tmap.get("enter_debug", ""), tmap.get("enter_debug", "")[:200])
     check("C2 enter_debug 描述给出可查字段 read_project_config",
-          "read_project_config" in tmap.get("enter_debug", ""), tmap.get("enter_debug", "")[:200])
+          "uvprojx_read(what=config)" in tmap.get("enter_debug", ""), tmap.get("enter_debug", "")[:200])
     check("C3 flash_debug 描述说明自动选路与 flash_plan",
           "debug_download" in tmap.get("flash_debug", "")
           and "explicit_flash" in tmap.get("flash_debug", ""), tmap.get("flash_debug", "")[:200])
-    check("C4 read_project_config 描述包含 update_flash_before_debugging",
-          "update_flash_before_debugging" in tmap.get("read_project_config", ""),
-          tmap.get("read_project_config", "")[:200])
+    check("C4 uvprojx_read 描述包含 update_flash_before_debugging",
+          "update_flash_before_debugging" in tmap.get("uvprojx_read", ""),
+          tmap.get("uvprojx_read", "")[:200])
 
     for f in (p_on, p_off, p_none):
         try:

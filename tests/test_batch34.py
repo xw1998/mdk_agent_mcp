@@ -290,7 +290,7 @@ async def group_e_surface(server):
 
     tools = await server.list_tools()
     names = sorted(t.name for t in tools)
-    check("E1 工具总数 232（批次36 再 +46，批次40 +3，批次42 +1）", len(names) == 232, len(names))
+    check("E1 工具总数 227（批次36 再 +46，批次40 +3，批次42 +1）", len(names) == 227, len(names))
     check("E2 session_state 已注册", "session_state" in names, names)
     by = {t.name: t for t in tools}
     props = (by["list_tools"].input_schema or {}).get("properties") or {}
@@ -307,7 +307,7 @@ async def group_e_surface(server):
 
     t5 = await call(server, "list_tools", {"max_lines": 5})
     check("E7 直调 max_lines：列表 5 条而 count 仍是全量（并说明计数字段口径）",
-          len(t5.get("tools") or []) == 5 and t5.get("count") == 232 and
+          len(t5.get("tools") or []) == 5 and t5.get("count") == 227 and
           (t5.get("output") or {}).get("truncated") is True and
           "全量" in (t5.get("output") or {}).get("hint", ""), t5.get("output"))
 
@@ -319,8 +319,8 @@ async def group_e_surface(server):
           (comp_len, full_len))
 
     big = await call(server, "list_tools", {"compact": True, "max_lines": 5, "full": True})
-    check("E9 full=true 直调取回全量 222 条且无 output",
-          big.get("count") == 232 and len(big.get("tools") or []) == 232 and "output" not in big,
+    check("E9 full=true 直调取回全量 227 条且无 output",
+          big.get("count") == 227 and len(big.get("tools") or []) == 227 and "output" not in big,
           big.get("count"))
 
     bad = await call(server, "list_tools", {"max_line": 5})
@@ -334,11 +334,11 @@ async def group_e_surface(server):
           len(sub.get("tools") or []) == 3 and (sub.get("output") or {}).get("truncated") is True,
           sub.get("output"))
 
-    cap = await call(server, "capabilities", {})
-    check("E12 capabilities 暴露 session 模块（状态文件路径/是否已保存）",
+    cap = await call(server, "mdk_guide", {"topic": "capabilities"})
+    check("E12 mdk_guide(topic=capabilities) 暴露 session 模块（状态文件路径/是否已保存）",
           (cap.get("modules") or {}).get("session", {}).get("available") is True and
           (cap.get("modules") or {}).get("session", {}).get("state_file"), cap.get("modules", {}).get("session"))
-    check("E13 capabilities 暴露 output_control 现状（受控工具数/环境默认）",
+    check("E13 mdk_guide(topic=capabilities) 暴露 output_control 现状（受控工具数/环境默认）",
           (cap.get("modules") or {}).get("output_control", {}).get("controlled_tools", 0) >= 20,
           cap.get("modules", {}).get("output_control"))
 
@@ -367,7 +367,7 @@ def group_f_docs():
     txt = io.open(sk, "r", encoding="utf-8").read()
     check("F2 技能带 name/description frontmatter（能被技能系统识别）",
           txt.startswith("---") and "name: mdkdebug" in txt and "description:" in txt, None)
-    for tool in ("capabilities", "list_tools", "session_state", "batch_debug_script",
+    for tool in ("list_tools", "session_state", "batch_debug_script",
                  "mdk_guide", "serial_expect", "svd_decode", "keil_health"):
         check("F3 技能提到关键工具 %s" % tool, tool in txt, None)
     check("F4 技能写明默认行为不变与裁剪会如实上报",

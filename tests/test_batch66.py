@@ -379,8 +379,8 @@ def group_g():
     print("== G 工具面 ==", flush=True)
     names_all = [t.name for t in __import__("asyncio").run(
         SV.create_server(toolsets="all").list_tools())]
-    check("G1 trace_swd_next 已注册、总数 232",
-          "trace_swd_next" in names_all and len(names_all) == 232,
+    check("G1 trace_swd_next 已注册、总数 227",
+          "trace_swd_next" in names_all and len(names_all) == 227,
           (len(names_all), "trace_swd_next" in names_all))
     trace_names = [t.name for t in __import__("asyncio").run(
         SV.create_server(toolsets="trace").list_tools())]

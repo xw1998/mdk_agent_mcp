@@ -81,8 +81,8 @@ def section_a():
     check("A1 三个新工具都注册了",
           all(n in names for n in NEW_TOOLS),
           [n for n in NEW_TOOLS if n not in names])
-    check("A2 注册总数 232（本批新增 3 个，批次105 后为 222）",
-          len(names) == 232, len(names))
+    check("A2 注册总数 227（本批新增 3 个，批次105 后为 222）",
+          len(names) == 227, len(names))
     check("A3 分组数量对（core 39 / mem 12 / serial 15）",
           len(TB.TOOLSETS["core"]) == 39 and len(TB.TOOLSETS["mem"]) == 12
           and len(TB.TOOLSETS["serial"]) == 15,

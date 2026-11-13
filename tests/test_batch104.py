@@ -208,12 +208,12 @@ def section_b():
           code == 2 and "read_mem" in err, (code, err[-200:]))
 
     # 简写：不带 call 直接给工具名
-    code, out, err = cli(["capabilities", "--compact"])
+    code, out, err = cli(["mdk_guide", "--arg", "topic=capabilities", "--compact"])
     try:
         cb = json.loads(out)
     except Exception:  # noqa: BLE001
         cb = {}
-    check("B14 简写 get_version 式调用能跑（capabilities 不需 Keil）",
+    check("B14 简写 get_version 式调用能跑（mdk_guide(topic=capabilities) 不需 Keil）",
           code == 0 and cb.get("ok") is True, (code, out[:200], err[:200]))
 
     # 需要 Keil 的工具：退出码必须与返回体自洽（不依赖本机是否开着 Keil）

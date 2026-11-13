@@ -25,15 +25,15 @@ from __future__ import annotations
 # 不起停进程、不占用共享资源）。**不在表里 = 会被标成非只读。**
 # ----------------------------------------------------------------------
 READONLY = {
-    # 工具面查询（批次56）：只读——看有哪些组、当前装了什么
-    "tools_groups",
+    # 工具面查询（批次56/109）：只读那一半现在叫 toolset(action="groups")；
+    # toolset 本身会装卸，故不在只读白名单里，改由 MUTATING 兜（见下）。
     # Keil / UVSOCK 侧：查询与解析
     "get_version", "get_status", "keil_health", "calc_expression", "read_variable",
     "read_mem", "read_mem_multi", "find_symbol", "get_current_location", "read_locals",
     "snapshot", "watch", "read_struct", "read_registers", "read_peripheral",
     "read_console_output", "read_async_messages", "list_peripherals", "list_breakpoints",
     "list_watchpoints", "list_uvoptx_breakpoints", "list_symbol_projects",
-    "list_uvision_instances", "project_targets", "read_project_config", "target_info",
+    "list_uvision_instances", "project_targets", "target_info",
     "query_memory_map", "search_mem", "disassemble", "fault_report", "diagnose",
     "breakpoint_stats", "cache_info", "address_for_line", "parse_map",
     # 重定位偏移校验：只读 ELF + 读目标内存，不改任何状态。
@@ -41,7 +41,7 @@ READONLY = {
     # 环境一致性体检：只读 DEV_ID/CPUID/Flash 指纹/寄存器，不起停目标、不下断点。
     "env_check",
     "parse_build_errors", "explain_build_error", "snapshot_diff", "wait_breakpoint",
-    "wait_state", "mdk_guide", "capabilities", "list_tools",
+    "wait_state", "mdk_guide", "list_tools",
     "list_peripherals", "svd_list", "svd_decode", "uvprojx_read",
     # 批次97：工程管理文件体检——只读文件（编码/BOM/行尾/XML/sha256），不写任何东西。
     "project_file_check",
@@ -104,14 +104,14 @@ READONLY = {
     # 镜像取证（批次78）：只读文件、只算哈希/熵/签名，不改任何东西。
     "image_inspect",
     # 批次87：镜像切分——只读文件、只算向量表与擦除带。
-    # 批次90：只有显式给 out_dir 时才把切片写出去（同 recover_diff 的
+    # 批次90：只有显式给 out_dir 时才把切片写出去（同 recover_bindiff(mode="fid") 的
     # save_reference_sig：写不写由参数决定，默认路径一个字节都不碰）。
     "image_split",
     # 批次79：逆向的读操作——只解析字节，不改任何东西
     "recover_probe", "recover_symbols", "recover_disasm",
-    # 批次86：函数匹配/版本比对——只读两侧镜像并算指纹；只有显式给
-    # save_reference_sig 时才写一个 .sig.json（那一步由参数控制，不在默认路径上）。
-    "recover_diff",
+    # 批次86/109：函数匹配/版本比对——只读两侧镜像并算指纹；只有显式给
+    # save_reference_sig 时才写一个 .sig.json（那一步由参数决定，不在默认路径上）。
+    # 批次109 起它并进 recover_bindiff(mode="fid")，只读白名单里只留后者。
     # 批次102：语义层与差分——只读镜像、只解析字节。两个会落盘的工具
     # （recover_bindiff / recover_datatable）写不写完全由参数决定：
     # recover_bindiff 只在显式给 out_dir 时写三份报告，recover_datatable
@@ -199,8 +199,9 @@ NON_IDEMPOTENT = {
 # `check_surface()` 会把这个不变式真的校一遍，别只写在注释里。
 # ----------------------------------------------------------------------
 MUTATING = {
-    # 工具面装卸（批次56）：改变上下文里的工具面，属于改状态
-    "tools_load",
+    # 工具面装卸（批次56/109）：改变上下文里的工具面，属于改状态。
+    # 原 tools_load / tools_groups 已并入 toolset（一个工具同时管问与装卸）。
+    "toolset",
     "batch", "batch_debug_script", "build_and_flash", "build_project",
     "clean_project", "clear_all_breakpoints", "clear_all_watchpoints",
     "clear_breakpoint", "clear_faults", "clear_uvoptx_breakpoints",

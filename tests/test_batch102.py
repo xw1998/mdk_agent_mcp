@@ -159,9 +159,9 @@ def section_a():
     names = set(tools)
     check("A1 五个新工具都注册了",
           all(n in names for n in NEW_TOOLS), [n for n in NEW_TOOLS if n not in names])
-    check("A2 注册总数 232（本批新增 5 个）", len(names) == 232, len(names))
-    check("A3 build 组 45 个且五个都在 build 组",
-          len(TB.TOOLSETS["build"]) == 45 and all(n in TB.TOOLSETS["build"]
+    check("A2 注册总数 227（本批新增 5 个）", len(names) == 227, len(names))
+    check("A3 build 组 43 个且五个都在 build 组",
+          len(TB.TOOLSETS["build"]) == 43 and all(n in TB.TOOLSETS["build"]
                                                  for n in NEW_TOOLS),
           len(TB.TOOLSETS["build"]))
     check("A4 不在任何别的组里重复挂（一键一义：每个工具只归一组）",
@@ -203,7 +203,7 @@ def section_a():
     finally:
         if old is not None:
             os.environ["MDKDEBUG_TOOLSETS"] = old
-    check("A10 默认面仍是 45 个工具", len(dflt) == 45, len(dflt))
+    check("A10 默认面仍是 42 个工具", len(dflt) == 42, len(dflt))
     check("A11 五个新工具默认收起（要 toolset 装载）",
           not (set(NEW_TOOLS) & dflt), sorted(set(NEW_TOOLS) & dflt))
 
@@ -674,16 +674,16 @@ def section_h():
     readme = io.open(os.path.join(ROOT, "README.md"), encoding="utf-8").read()
     skill = io.open(os.path.join(ROOT, "skills", "mdkdebug", "SKILL.md"),
                     encoding="utf-8").read()
-    check("H1 README 当前总数同步到 232", "232 个工具" in readme, None)
-    check("H2 README 的默认收起数同步到 187", "187 个" in readme, None)
+    check("H1 README 当前总数同步到 227", "227 个工具" in readme, None)
+    check("H2 README 的默认收起数同步到 185", "185 个" in readme, None)
     check("H3 README 提到五个新工具名",
           all(n in readme for n in NEW_TOOLS),
           [n for n in NEW_TOOLS if n not in readme])
-    check("H4 SKILL 同步到 232 个工具", "232 个工具" in skill, None)
+    check("H4 SKILL 同步到 227 个工具", "227 个工具" in skill, None)
     build_row = [ln for ln in readme.splitlines()
                  if ln.startswith("| `build` |")]
-    check("H5 README build 组规模同步到 45 个（且列了新工具）",
-          len(build_row) == 1 and "（45 个）" in build_row[0]
+    check("H5 README build 组规模同步到 43 个（且列了新工具）",
+          len(build_row) == 1 and "（43 个）" in build_row[0]
           and "调用图栈深" in build_row[0], build_row[:1])
 
     gates = io.open(os.path.join(ROOT, "tools", "run_all_tests.py"),

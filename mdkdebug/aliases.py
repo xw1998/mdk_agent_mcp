@@ -115,8 +115,22 @@ _SPEC = {
               "stop_on_error": ["abort_on_error", "stop", "fail_fast"]},
     "project_targets": {"project": _PROJECT},
     "set_debug_target": {"target": ["name", "target_name", "cfg"]},
-    "read_project_config": {"project": _PROJECT,
-                            "target": ["target_name", "cfg", "name"]},
+    # 批次109：原 read_project_config 并入 uvprojx_read(what="config")，
+    # 参数名沿用同一套（project / target），再加 what 的别名。
+    "uvprojx_read": {"project": _PROJECT,
+                     "target": ["target_name", "cfg", "name"],
+                     "what": ["section", "part", "which", "kind", "scope"]},
+    # 批次109：toolset 接管了原 tools_groups / tools_load 的入口，
+    # 老写法里的 group= 视作 toolsets=（load/unload 的语义由 action 决定）。
+    "toolset": {"action": ["op", "cmd", "command", "do"],
+                "toolsets": ["group", "groups", "tools", "sets", "spec"]},
+    # 批次109：recover_bindiff 现在也承担原 recover_diff 的 mode="fid" 路径。
+    "recover_bindiff": {"reference": ["ref", "old", "left", "reference_file"],
+                        "target": ["new", "tgt", "target_file"],
+                        "mode": ["kind", "how"],
+                        "threshold": ["min_similarity", "similarity"],
+                        "reference_sig": ["left_sig", "ref_sig"],
+                        "target_sig": ["right_sig", "tgt_sig"]},
     "build_project": {"project": _PROJECT, "target": ["target_name", "cfg", "name"],
                       "timeout_s": ["timeout", "seconds"],
                       "ensure_debug_channel": ["ensure_debug", "keep_channel"]},

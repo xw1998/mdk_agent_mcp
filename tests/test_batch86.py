@@ -7,7 +7,7 @@
   B 匹配口径（纯函数，手写索引）：名字≠代码、重复不展开、候选不是等价、门槛
   C 指纹库文件：不覆盖、版本对齐、写完回读
   D 端到端：真镜像自比对、改一个函数、容器不同、库文件复用
-  E 工具面：注册 232、在 build 组且不在默认面、参数与文案
+  E 工具面：注册 227、在 build 组且不在默认面、参数与文案
   F 回归：内部字段不外泄、既有输出不变、不新增依赖
 
 运行：python -m tests.test_batch86
@@ -301,39 +301,42 @@ def section_e():
     from mdkdebug import annotate as AN
     srv = SV.create_server(port=15886, toolsets="all")
     tools = {t.name: t for t in asyncio.run(srv.list_tools())}
-    check("E1 注册总数 232（批次86 +1）", len(tools) == 232, len(tools))
-    check("E2 recover_diff 已注册", "recover_diff" in tools)
-    props = (tools.get("recover_diff").input_schema.get("properties") or {})
-    check("E3 参数齐全（reference/target/sig/base/arch/min_insns/full）",
+    check("E1 注册总数 227（批次86 +1）", len(tools) == 227, len(tools))
+    check("E2 recover_bindiff 已注册", "recover_bindiff" in tools)
+    props = (tools.get("recover_bindiff").input_schema.get("properties") or {})
+    check("E3 参数齐全（reference/target/sig/base/arch/min_insns/full/mode）",
           all(k in props for k in ("reference", "target", "reference_sig", "target_sig",
-                                   "save_reference_sig", "reference_base", "target_base",
+                                   "mode",
+                                   "save_reference_sig", "base", "base_target",
                                    "arch", "endian", "bits", "thumb", "entry",
                                    "min_insns", "full", "max_rows")), sorted(props))
-    desc = tools.get("recover_diff").description or ""
+    desc = tools.get("recover_bindiff").description or ""
     # lean 档位会改写描述（"工具描述分层"），所以纪律原文从注册源文里核；
     # 返回给模型的描述至少要还在说指纹/字节这两件事。
     src = io.open(os.path.join(ROOT, "mdkdebug", "server.py"),
                   encoding="utf-8").read()
     check("E4 描述里把三条关键纪律写明（名字≠代码 / only 不代表增删 / 候选非等价）",
-          "不是「代码没变」" in src and "不证明源码有增删" in src
+          "机器码没变" in src and "不单独证明源码有增删" in src
           and "不作等价断言" in src
           and ("指纹" in desc or "字节" in desc), (desc[:60], len(desc)))
     default_srv = SV.create_server(port=15887)
     dnames = {t.name for t in asyncio.run(default_srv.list_tools())}
-    check("E5 不在默认面（逆向场景按需装载），默认面仍是 45 个",
-          len(dnames) == 45 and "recover_diff" not in dnames, len(dnames))
-    check("E6 归属 build 组", "recover_diff" in SV._toolbox.TOOLSETS.get("build", set()))
-    a = AN.annotations_for("recover_diff")
+    check("E5 不在默认面（逆向场景按需装载），默认面仍是 42 个",
+          len(dnames) == 42 and "recover_bindiff" not in dnames, len(dnames))
+    check("E6 归属 build 组", "recover_bindiff" in SV._toolbox.TOOLSETS.get("build", set()))
+    a = AN.annotations_for("recover_bindiff")
     check("E7 标为只读工具（不写文件除非显式 save_reference_sig）",
           a["readOnlyHint"] is True, a)
 
     r = json.loads(asyncio.run(srv.call_tool(
-        "recover_diff", {"reference": FX, "target": FX})).content[0].text)
+        "recover_bindiff", {"reference": FX, "target": FX,
+                            "mode": "fid"})).content[0].text)
     check("E8 端到端调用：自比对 13 条全配、覆盖度照实报",
           r.get("ok") and r["counts"]["matched"] == 13
           and r["coverage"]["inventory_complete"] is False, r.get("error"))
     r2 = json.loads(asyncio.run(srv.call_tool(
-        "recover_diff", {"reference": FX, "target": _tmp("nope.bin")})).content[0].text)
+        "recover_bindiff", {"reference": FX, "target": _tmp("nope.bin"),
+                            "mode": "fid"})).content[0].text)
     check("E9 目标不存在 → 明确报错、不给半份结果",
           r2.get("ok") is False and "不存在" in (r2.get("error") or ""), r2.get("error"))
 

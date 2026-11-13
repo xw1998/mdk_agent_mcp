@@ -123,7 +123,7 @@ ERROR_CODES = {
     "project-not-found": {
         "text": "工程文件不存在或打不开",
         "next_actions": [
-            "核对 project 路径（可先用 read_project_config 看当前配置的工程）",
+            "核对 project 路径（可先用 uvprojx_read 看当前配置的工程）",
             "确认工程没有被 Keil 独占打开（close_uvision 后再试）",
         ],
     },
@@ -164,7 +164,7 @@ ERROR_CODES = {
     "debug-info-missing": {
         "text": "当前 PC 所在函数没有可用的局部变量调试信息（不是『调试通道坏了』）",
         "next_actions": [
-            "多为编译优化把局部变量优化掉了（read_project_config 看 optimization，-Otime/-O3 常见）：调低优化级别重新编译再试",
+            "多为编译优化把局部变量优化掉了（uvprojx_read(what=config) 看 optimization，-Otime/-O3 常见）：调低优化级别重新编译再试",
             "先 get_current_location 确认停在函数体内（停在库函数/启动代码里通常本就没有局部信息）",
             "看全局变量用 read_variable，看固定地址的值用 read_mem（不依赖调试信息）",
         ],
@@ -173,7 +173,7 @@ ERROR_CODES = {
         "text": "缺少调试符号（未定位到 .axf 或符号表为空）",
         "next_actions": [
             "先编译一次生成 .axf（build_project 或 toolchain_build），再用 set_symbol_file 指定",
-            "传过工程就会有符号：任何带 project 参数的工具（如 launch_uvision/build_project）都会顺带把符号挂上，可先用 read_project_config 确认工程路径",
+            "传过工程就会有符号：任何带 project 参数的工具（如 launch_uvision/build_project）都会顺带把符号挂上，可先用 uvprojx_read 确认工程路径",
             "用 list_symbol_projects 看内置/注入的符号工程，核对构建输出目录里确实有 .axf",
         ],
     },
@@ -398,7 +398,7 @@ ERROR_CODES = {
     "guide-unknown-tool": {
         "text": "mdk_guide(topic=tool) 里的 name 不是本服务的工具名",
         "next_actions": [
-            "用 tools_groups(group=...) 或 list_tools(keyword=...) 查准确工具名",
+            "用 toolset(action=groups, toolsets=组名) 或 list_tools(keyword=...) 查准确工具名",
             "工具名要完全一致（如 trace_swd_read，不是 swd_read）",
         ],
     },
@@ -413,7 +413,7 @@ ERROR_CODES = {
         "text": "工具面按需加载在当前 MCP SDK 上不可用（找不到预期的工具注册表接口）",
         "next_actions": [
             "这是 SDK 兼容性问题，不是工程配置问题：此时全部工具都还在，能力一个不少",
-            "用 capabilities 看 tool_surface 的 tool_count 确认当前工具面",
+            "用 mdk_guide(topic=capabilities) 看 tool_surface 的 tool_count 确认当前工具面",
             "要固定成全开：启动前设环境变量 MDKDEBUG_TOOLSETS=all",
         ],
     },

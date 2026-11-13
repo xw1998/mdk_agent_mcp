@@ -52,7 +52,8 @@ logger = logging.getLogger("mdkdebug.outctl")
 
 #: 受控工具（返回体容易过大、且都是「列表 + 说明」结构）
 HIGH_OUTPUT = {
-    "list_tools", "capabilities", "mdk_guide",
+    # 批次109：capabilities 并入 mdk_guide(topic="capabilities")，只留后者
+    "list_tools", "mdk_guide",
     "snapshot", "snapshot_diff", "read_mem", "read_mem_multi", "search_mem",
     "read_registers", "read_struct", "read_locals", "read_peripheral",
     "list_peripherals", "query_memory_map", "parse_map", "parse_build_errors",

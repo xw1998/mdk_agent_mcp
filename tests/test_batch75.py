@@ -264,10 +264,10 @@ def section_e():
     os.environ.pop("MDKDEBUG_TOOLSETS", None)
     srv = SV.create_server(port=PORT)
     names = [t.name for t in asyncio.run(srv.list_tools())]
-    check("E2 不在默认面（默认面仍是 45 个，注意力预算不涨）",
-          len(names) == 45 and "trace_watch" not in names, len(names))
-    check("E3 工具总数 == 232（新工具已注册且计入）",
-          len(SV.create_server(toolsets="all", port=PORT)._tool_manager._tools) == 232)
+    check("E2 不在默认面（默认面仍是 42 个，注意力预算不涨）",
+          len(names) == 42 and "trace_watch" not in names, len(names))
+    check("E3 工具总数 == 227（新工具已注册且计入）",
+          len(SV.create_server(toolsets="all", port=PORT)._tool_manager._tools) == 227)
 
 # ------------------------------------------------------------------ F
 def section_f():

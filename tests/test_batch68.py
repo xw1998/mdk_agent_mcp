@@ -670,8 +670,8 @@ def group_f():
     srv_all = SV.create_server(port=PORT_TOOL, toolsets="all")
     na = tool_names(srv_all)
 
-    check("F1 注册总数 232", len(na) == 232, len(na))
-    check("F2 默认只暴露 45 个", len(nd) == 45, len(nd))
+    check("F1 注册总数 227", len(na) == 227, len(na))
+    check("F2 默认只暴露 42 个", len(nd) == 42, len(nd))
     check("F3 code 组默认收起（4 个 code_* 都不在默认面）",
           not any(t.startswith("code_") for t in nd), [t for t in nd if t.startswith("code_")])
     check("F4 code 组正好是那 7 个工具",
@@ -679,26 +679,26 @@ def group_f():
     check("F5 组数 12，且每个组都有用途说明",
           len(TB.TOOLSETS) == 12 and len(TB.GROUP_NOTES) == 12
           and "code" in TB.GROUP_NOTES, (len(TB.TOOLSETS), len(TB.GROUP_NOTES)))
-    check("F6 高输出工具 48 个（批次68 +4、批次69 +2）", len(OC.HIGH_OUTPUT) == 48,
+    check("F6 高输出工具 47 个（批次68 +4、批次69 +2）", len(OC.HIGH_OUTPUT) == 47,
           len(OC.HIGH_OUTPUT))
     st = call_sync(srv_def, "toolset", {"action": "status"})
     grp = (st.get("groups") or {}).get("code") or {}
     check("F7 toolset(status) 列得出 code 组与规模",
           grp.get("size") == 7, (st.get("groups") or {}).get("code"))
     r = call_sync(srv_def, "toolset", {"action": "load", "toolsets": "code"})
-    check("F8 toolset(load, code) 能把 7 个装回来，暴露数 45→52",
+    check("F8 toolset(load, code) 能把 7 个装回来，暴露数 42→49",
           r.get("ok") is True and len(r.get("loaded") or []) == 7
-          and r.get("exposed") == 52, r)
+          and r.get("exposed") == 49, r)
     check("F9 装回后 code_query 立刻可调",
           "code_query" in tool_names(srv_def), None)
     # 用**新的**默认面服务器：srv_def 上刚 load 过 code，不再是「未装载」
     srv_fresh = SV.create_server(port=PORT_DEF + 2, toolsets=None)
-    cap = call_sync(srv_fresh, "capabilities", {})
+    cap = call_sync(srv_fresh, "mdk_guide", {"topic": "capabilities"})
     surf = cap.get("tool_surface") or {}
-    check("F10 capabilities 的 tool_surface 里 code 组 7 个且列为「未装载」",
+    check("F10 mdk_guide(topic=capabilities) 的 tool_surface 里 code 组 7 个且列为「未装载」",
           (surf.get("groups") or {}).get("code") == 7
           and "code" in (surf.get("not_loaded_groups") or [])
-          and surf.get("registered_total") == 232, surf)
+          and surf.get("registered_total") == 227, surf)
 
 
 def main():

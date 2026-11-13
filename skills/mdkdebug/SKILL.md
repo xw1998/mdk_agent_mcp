@@ -5,7 +5,7 @@ description: 用 mdkdebug MCP 驱动 Keil uVision 做在线调试——读变量
 
 # mdkdebug —— Keil 在线调试的组合拳
 
-mdkdebug 是一个把 Keil uVision 变成「可被 AI 调用」的 MCP 服务，共 232 个工具。
+mdkdebug 是一个把 Keil uVision 变成「可被 AI 调用」的 MCP 服务，共 227 个工具。
 本技能告诉你**先调什么、按什么顺序调、遇到问题找谁**，避免在近百个工具里瞎试。
 
 ## 零、怎么把它起来（含宿主环境隔离）
@@ -26,7 +26,7 @@ mdkdebug 是一个把 Keil uVision 变成「可被 AI 调用」的 MCP 服务，
 ## 一、动手前的四条纪律
 
 1. **冷启动先对齐环境**，不要凭印象直接下命令：
-   - `capabilities` —— 有哪些通道可用（UVSOCK / UV4 命令行 / SVD / 串口 / 构建），当前工程与符号状态；
+   - `mdk_guide(topic="capabilities")` —— 有哪些通道可用（UVSOCK / UV4 命令行 / SVD / 串口 / 构建），当前工程与符号状态（批次109 起原 `capabilities` 并入这里）；
    - `list_tools(keyword=...)` —— 复杂工具的参数名不统一（`query/expr/addr/n_bytes`），
      这里有必填参数 + `example_args`，照抄即可；
    - `mdk_guide` —— 典型工作流与常见坑的入口。
@@ -87,7 +87,7 @@ GUI 里就是打不开，且不给更具体的提示。所以 `project_file_chec
    （返回 `verify="byte-identical"`）。任一条不过就**不落盘**。
 2. **改前先拿到格式基线**（`encoding` / `bom` / `newline` / `sha256`）：
    `project_file_check` 一次看整个工程（含同名 `.uvoptx`）；`uvprojx_read` /
-   `read_project_config` / `list_uvoptx_breakpoints` 的返回值里也**自带 `file_format`**，
+   `uvprojx_read` / `list_uvoptx_breakpoints` 的返回值里也**自带 `file_format`**（原 `read_project_config` 已并入 `uvprojx_read(what="config")` 的 `compile` 块），
    读配置时顺手就有了，不用多跑一趟。**改完再核对**：`sha256` 应该变，
    `encoding` / `newline` 必须**没变**（格式坏了会带 `file_format_warning`）；
    `bom` 是唯一例外：带 BOM 的文件写完 BOM 会消失，那是修复。
@@ -222,7 +222,7 @@ recover_ledger(project_dir, image=file, claim=...)  # 闭环台账：哪条义�
 **这条路的三条预算与闸门**（批次90，都是「别让工具替你猜」）：
 - `recover_project_exact` / `recover_project` **只对 ARM(32) 成立**（armasm + armlink）。
   判出来是 arm64 / x86 / x86_64 / riscv / mips / ppc / m68k / sparc / mos65xx 时**直接拒**，
-  并列出还能做什么（`recover_probe` / `recover_symbols` / `recover_disasm` / `recover_diff` /
+  并列出还能做什么（`recover_probe` / `recover_symbols` / `recover_disasm` / `recover_bindiff(mode="fid")` /
   `image_split`）——以前要等到 `recover_verify` 的 armlink 才炸成一句「链接失败」。
   架构**未判定**不拒（判不出来 ≠ 不是 ARM），但这条链的目标对不对没有证据。
 - `recover_probe(detail="compact")`：每函数只留 `addr_hex/name/size/confidence/sources/
@@ -362,12 +362,13 @@ thunk 另带 `is_thunk` + `thunk_to`。读这些字段的口径：
     数据不像向量表时**不猜、照旧报错**。
   - 报错里的地址统一 8 位补零（`0x08005204`），`file_offset_hex` 仍是文件偏移原样。
 
-**工程优化等级**（批次96）：`read_project_config` 的 `optimization_level` 由
+**工程优化等级**（批次96）：`uvprojx_read(what="config").compile.current.optimization_level` 由
 `<Cads><Optim>` 决定，**1-based**（1..4 → `-O0`..`-O3`）；`-Otime` 看 `optimize_for_time`
 （来自 `<Cads><oTime>`，与 `<OptFeed>` 无关）。越界返回 `optimization_error`，不猜。
 要 100% 确认时打开工程 `CreateBatchFile`，直接读构建生成的 `.bat` / `.__i` 里的命令行。
 
-**两版固件比对 / 库函数指纹识别**（批次86）：`recover_diff(reference, target, ...)`。
+**两版固件比对 / 库函数指纹识别**（批次86；批次109 起并入 `recover_bindiff(mode="fid")`）：
+`recover_bindiff(reference, target, mode="fid", ...)`。
 读法只有一条：**「名字对上了」和「代码对上了」是两件事**。
 - `basis="name"` 只是对应关系（两侧符号表同名且唯一），真正回答「代码没变」的是
   `bytes_equal`：`true` / `false`（改过）/ `null`（区间或架构证据不足，判不了）。
@@ -485,15 +486,17 @@ RTT、变量 scope、halt 采样、DWT 计数、PC 采样这些**观测**工具�
 
 - **参数别名**：`query`/`name`/`expression`、`addr`/`address`、`timeout_ms`/`timeout_s`
   这类直觉写法都能落地；但**未列出的参数名会被拒绝**（不会静默用默认值），报错里会列出可用参数。
-- **工具面默认精简**：默认只暴露 45 个（`core` 39 个 + 6 个元工具），其余 187 个按需装载——
-  `toolset(action="load", toolsets="mem,trace")` 装回来、`toolset(action="status")` 看现状；
-  启动时也可用 `MDKDEBUG_TOOLSETS=serial` 指定（参数优先），`=all` 全开。可用组名见 `capabilities`；
-  `tools_groups()` 列组/档总览、`tools_load(group="mem")` 等价装卸（新入口，参数更少）。
+- **工具面默认精简**：默认只暴露 42 个（`core` 39 个，其中 `mdk_guide` 兼作元工具，再加 3 个元工具），
+  其余 185 个按需装载——`toolset(action="load", toolsets="mem,trace")` 装回来、`toolset(action="status")`
+  看现状、`toolset(action="groups")` 列组/档总览；启动时也可用 `MDKDEBUG_TOOLSETS=serial` 指定
+  （参数优先），`=all` 全开。可用组名见 `mdk_guide(topic="capabilities")`。
+  **批次109 起 `toolset` 是唯一的查询 + 装卸入口**（原 `tools_groups` / `tools_load` 已并入，
+  老参数名 `group` 仍可用；`unload=true` 改成 `action="unload"`）。
   **符号修复手段 `set_symbol_file` / `list_symbol_projects` 已在默认面（`core` 组，批次67 起）**——
   `env_check` 报「符号与固件不同源」时，`next_actions` 第一条就让你直接调 `set_symbol_file` 切到刚烧录的那份；
   只有当你把 `core` 组从面上裁掉（如 `MDKDEBUG_TOOLSETS=mem`）时，它才会把「先 `toolset(action="load", toolsets="symbol")`」这一步补在最前面；
   自己手工切符号时也记得先装这一组，否则只会撞「未知工具」。
-- **上下文不够时的三把刀**：`nano` 极简档（`MDKDEBUG_TOOLSETS=nano`，19 个工具 / 约 1.5 万字节
+- **上下文不够时的三把刀**：`nano` 极简档（`MDKDEBUG_TOOLSETS=nano`，16 个工具 / 约 1.3 万字节
   线上载荷，自动用 `min` 描述档；含 `mdk_guide`，正文取回不用另外装）＋ **描述分层** `MDKDEBUG_DESC=full|lean|min`（批次74 起**默认 `lean`**，`nano` 档自动 `min`；`MDKDEBUG_DESC=full` 整面逐字节还原）
   ＋ **结构瘦身**（默认开，`MDKDEBUG_SURFACE=off` 关闭）：只改 tools/list 线上副本，
   去掉恒定样板的 `outputSchema`、inputSchema 里的注释性 `title`、annotations 里等于规范默认值的字段；

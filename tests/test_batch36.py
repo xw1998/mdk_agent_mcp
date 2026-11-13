@@ -691,7 +691,7 @@ def test_surface(server):
     r = asyncio.run(call(server, "list_tools", {}))
     tools = r.get("tools") or []
     names = [t.get("tool") if isinstance(t, dict) else t for t in tools]
-    check("E1 工具总数 232", len(names) == 232, len(names))
+    check("E1 工具总数 227", len(names) == 227, len(names))
     check("E1b 工程配置发现工具在册", "debug_config" in names)
     # target_ 前缀共 4 个：本批新增 target_list/show/guess 3 个，
     # 另有历史工具 target_info（MDK 侧调试目标信息），故计 4。
@@ -701,9 +701,9 @@ def test_surface(server):
         got = [n for n in names if n.startswith(pre)]
         check("E2 %s* 共 %d 个" % (pre, cnt), len(got) == cnt, len(got))
 
-    r = asyncio.run(call(server, "capabilities", {}))
+    r = asyncio.run(call(server, "mdk_guide", {"topic": "capabilities"}))
     nm = r.get("non_mdk") or {}
-    check("E3 capabilities 暴露 non_mdk", bool(nm), list(r)[:12])
+    check("E3 mdk_guide(topic=capabilities) 暴露 non_mdk", bool(nm), list(r)[:12])
     check("E4 non_mdk 报工具链现状",
           "found" in json.dumps(nm.get("toolchain") or {}, ensure_ascii=False)
           or "families_found" in (nm.get("toolchain") or {}), nm.get("toolchain"))
@@ -714,7 +714,7 @@ def test_surface(server):
           nm.get("openocd"))
     check("E7 non_mdk 报 trace 紧凑状态",
           isinstance(nm.get("trace"), dict) and "mode" in nm["trace"], nm.get("trace"))
-    check("E8 capabilities 给出非 MDK 链路建议",
+    check("E8 mdk_guide(topic=capabilities) 给出非 MDK 链路建议",
           "when_to_use" in nm, list(nm)[:12])
 
     import mdkdebug

@@ -259,12 +259,12 @@ def section_d():
     build = TB.tools_of("build")
     check("D1 firmware_precheck 在 build 组", "firmware_precheck" in build, len(build))
     check("D2 build_flash_verify 在 build 组", "build_flash_verify" in build, len(build))
-    check("D3 build 组规模 44（批次86 的 recover_diff 归在 build）", len(TB.TOOLSETS["build"]) == 45, len(TB.TOOLSETS["build"]))
+    check("D3 build 组规模 44（批次86 的 recover_diff 归在 build）", len(TB.TOOLSETS["build"]) == 43, len(TB.TOOLSETS["build"]))
 
     all_n = len(asyncio.run(SV.create_server(port=PORT, toolsets="all").list_tools()))
     core_n = len(asyncio.run(SV.create_server(port=PORT, toolsets="core").list_tools()))
-    check("D4 注册总数 232", all_n == 232, all_n)
-    check("D5 默认面仍 45（两个新工具不在默认面）", core_n == 45, core_n)
+    check("D4 注册总数 227", all_n == 227, all_n)
+    check("D5 默认面仍 42（两个新工具不在默认面）", core_n == 42, core_n)
 
     a_pre = AN.annotations_for("firmware_precheck")
     check("D6 firmware_precheck 标为只读",

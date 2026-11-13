@@ -12,7 +12,7 @@ xref（谁碰过这个地址）、call graph（谁调谁）、jump table / switc
   D 调用图：入度出度、根（=有出边无入边）、环（Tarjan）、深度
   E 跳转表：tbb / tbh / ldr pc 表 / add pc 相对表 / 比较链
   F 真镜像端到端：关系层进 report.json、三份 CSV 落盘、老文件不变
-  G 工具面：232 个工具（本批不新增；+1 来自批次86）
+  G 工具面：227 个工具（本批不新增；+1 来自批次86）
 
 运行：python -m tests.test_batch82
 """
@@ -373,7 +373,7 @@ def section_g():
     from mdkdebug import server as SV
     names = {t.name for t in asyncio.run(
         SV.create_server(port=15882, toolsets="all").list_tools())}
-    check("G1 工具总数 232（本批不新增）", len(names) == 232, len(names))
+    check("G1 工具总数 227（本批不新增）", len(names) == 227, len(names))
     # 批次105（0.2.29）起新增了 recover_xref：它不新造关系层算法，只是把早已存在、
     # 此前仅作为 recover_project 副产品（map/xrefs.csv）流出的 reveng.build_xrefs 接到工具出口。
     # 所以这里放行它，只禁止「别的关系类新工具」。

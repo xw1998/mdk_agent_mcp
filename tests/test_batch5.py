@@ -49,11 +49,12 @@ async def main():
     time.sleep(0.2)
     try:
         server = create_server(host="127.0.0.1", port=PORT, idle_timeout=5.0,
-                               axf_path=_AXF if os.path.isfile(_AXF) else None)
+                               axf_path=_AXF if os.path.isfile(_AXF) else None,
+                               toolsets="all")  # 本批工具分散在 core/mem/build，全装
         tools = {t.name: t for t in await server.list_tools()}
         names = set(tools)
         need = {"read_mem_multi", "batch", "project_targets",
-                "set_debug_target", "read_project_config"}
+                "set_debug_target", "uvprojx_read"}
         check("新工具已注册(5)", need.issubset(names), sorted(need - names))
 
         # ---- read_mem_multi：一次读多个地址 ----
@@ -117,26 +118,28 @@ async def main():
         d = load(r)
         check("set_debug_target 非法名 ok=False", d.get("ok") is False, r[:200])
 
-        # ---- read_project_config：真实 uvprojx 解析（纯文件） ----
+        # ---- uvprojx_read(what=config)：真实 uvprojx 解析（纯文件）；批次109 并入原 read_project_config ----
         if os.path.isfile(_UVPX):
-            r = await call(server, "read_project_config", {"project": _UVPX})
+            r = await call(server, "uvprojx_read", {"project": _UVPX, "what": "config"})
             d = load(r)
-            check("read_project_config ok", d.get("ok") is True, r[:300])
-            cur = d.get("current", {})
-            check("read_project_config 编译器=ARMCC(AC5)",
+            check("uvprojx_read(what=config) ok", d.get("ok") is True, r[:300])
+            cur = (d.get("compile") or {}).get("current", {})
+            check("compile 编译器=ARMCC(AC5)",
                   cur.get("compiler") == "ARMCC(AC5)", cur.get("compiler", ""))
             # Optim=4 是 1-based ⇒ -O3；-Otime 是另一个开关 <Cads><oTime>
-            check("read_project_config 优化=-O3（Optim=4，1-based）",
+            check("compile 优化=-O3（Optim=4，1-based）",
                   cur.get("optimization_level") == "-O3", cur.get("optimization_level", ""))
-            check("read_project_config optimize_for_time=False（oTime=0）",
+            check("compile optimize_for_time=False（oTime=0）",
                   cur.get("optimize_for_time") is False, cur.get("optimize_for_time"))
             defs = cur.get("defines", [])
-            check("read_project_config 宏含 USE_HAL_DRIVER/STM32F401xC",
+            check("compile 宏含 USE_HAL_DRIVER/STM32F401xC",
                   "USE_HAL_DRIVER" in defs and "STM32F401xC" in defs, str(defs))
-            check("read_project_config targets数>=1", d.get("count", 0) >= 1)
+            check("read_project_config targets数>=1", len((d.get("compile") or {}).get("targets") or []) >= 1)
             # 指定 target
-            r = await call(server, "read_project_config", {"project": _UVPX, "target": "mdk_test"})
-            check("read_project_config 指定target", load(r).get("current", {}).get("name") == "mdk_test")
+            r = await call(server, "uvprojx_read",
+                            {"project": _UVPX, "target": "mdk_test", "what": "config"})
+            check("read_project_config 指定target",
+                  ((load(r).get("compile") or {}).get("current") or {}).get("name") == "mdk_test")
 
             # ---- 批次96：Optim 是 1-based；越界要报错；-Otime 来自 oTime ----
             import tempfile
@@ -155,8 +158,8 @@ async def main():
                 fp = os.path.join(d0, tag + ".uvprojx")
                 with open(fp, "w", encoding="utf-8") as f:
                     f.write(mini % (optim, otime))
-                dd = load(await call(server, "read_project_config", {"project": fp}))
-                cur = dd.get("current") or {}
+                dd = load(await call(server, "uvprojx_read", {"project": fp, "what": "config"}))
+                cur = (dd.get("compile") or {}).get("current") or {}
                 check("批次96 Optim=%d/oTime=%d ⇒ level=%r%s" % (
                     optim, otime, want_lvl,
                     "、越界报错" if want_err else ""),
@@ -165,7 +168,7 @@ async def main():
                          else not cur.get("optimization_error"))
                     and cur.get("optimize_for_time") is want_time, cur)
         else:
-            check("read_project_config 无真实uvprojx(跳过真值断言)", True)
+            check("uvprojx_read 无真实uvprojx(跳过真值断言)", True)
 
         # ---- 全量工具数 ----
         check("工具总数>=57", len(names) >= 57, f"{len(names)}")

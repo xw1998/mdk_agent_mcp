@@ -3193,7 +3193,7 @@ def _guide_tool(topic: str, name: str, server) -> dict:
                         "error_code": "guide-unknown-tool",
                         "error": "没有这个工具：%s" % nm,
                         "hint": "工具名要完全一致（如 trace_swd_read）；"
-                                "用 list_tools 或 tools_groups 查准确名字"}
+                                "用 list_tools 或 toolset(action=groups) 查准确名字"}
             return {"ok": True, "name": nm, "thinned": False,
                     "description": (getattr(tools[nm], "description", "") or ""),
                     "note": "这个工具的说明本来就不长，没有被挪出上下文"}
@@ -4029,7 +4029,7 @@ def create_server(host: str = "127.0.0.1", port: int = 4823,
             "Update Target before Debugging（.uvprojx 的 Utilities/Flash1/UpdateFlashBeforeDebugging=1），"
             "Keil 会在进入调试前**自动把最新 .axf 下载进 Flash**（等价一次烧录）——此时编译完直接 "
             "enter_debug 即可，不必先 flash_download；该选项为 0 时 Keil 不下载，板上可能仍是旧固件"
-            "（可用 read_project_config 查该字段）。"
+            "（可用 uvprojx_read(what=config) 查该字段）。"
             "进入后即可设断点、读变量、运行控制。注意：若当前 Keil 是旧窗口、加载旧固件，进入后调试的是旧代码符号；建议改用 flash_debug 闭环（关旧Keil→编烧→重开→进调试）。受工程 Load/Flash Download/Run-to-main 设置影响，属有副作用操作。需 UVSOCK 已开启。"
             "真机实测：进入调试是异步的——命令返回成功时目标尚未挂载完成，约 0.6~0.7s 后才真正就绪，"
             "期间紧接的读内存/表达式/断点命令会返回 status=6（Target is not in debug mode）。"
@@ -7404,7 +7404,7 @@ def create_server(host: str = "127.0.0.1", port: int = 4823,
             "什么时候需要它：怀疑增量构建残留导致行为诡异（改了预处理脚本如 gen_scatter.py、改了构建配置、"
             "产物时间戳比源码新）——此时 rebuild_project 的 -r 可能仍复用未被判定过期的产物，"
             "用本工具（或 rebuild_project(clean_first=true) 的 -cr）先清干净再编。"
-            "配套 read_project_config 可先确认 target 名；返回值含 exit_code_text / exit_code_meaning / "
+            "配套 uvprojx_read 可先确认 target 名；返回值含 exit_code_text / exit_code_meaning / "
             "next_actions（失败时按 UV4 退出码给下一步，如 15=UV4 被占用、11=工程打不开、13=写入错误）。"
         ),
     )
@@ -7972,60 +7972,8 @@ def create_server(host: str = "127.0.0.1", port: int = 4823,
         except Exception as e:  # noqa: BLE001
             return _js({"ok": False, "error": str(e)})
 
-    @server.tool(
-        name="recover_diff",
-        title="固件逆向：两版固件函数比对 / 库函数指纹识别（FID）",
-        description=(
-            "把两份镜像的函数集合配对：reference（通常是**带符号的 axf/elf**，或一份已存的"
-            "指纹库）与 target（通常是**剥离符号的新固件**，也可以是另一版本）。两条主用途：\n"
-            "① **版本比对**：哪个函数没变（basis=bytes）、哪个改过（basis=name 但 "
-            "bytes_equal=false）、哪些是新增/消失（only_left / only_right）；\n"
-            "② **库函数指纹识别（FID）**：拿带符号的库/旧版当指纹库，认出裸固件里哪些函数"
-            "是同一份代码（连带给出它们在库里的名字）。\n"
-            "判据（按顺序，每种 basis 的含义不同，别混读）：\n"
-            "- **basis=name**：两侧符号表写了同一个名字且各自唯一。这是**对应关系**，"
-            "不是「代码没变」——`bytes_equal` 才说明函数体字节是否相同（null 表示区间或"
-            "架构证据不足，判不了）；\n"
-            "- **basis=bytes**：函数体原始字节 SHA-256 相同，且区间**有证据**（符号长度或"
-            "沿控制流走到终止指令）、两侧长度相等、指纹在两侧都唯一、架构相同；\n"
-            "- **state=candidate / basis=insn_fingerprint**：规范化指令序列相同（代码地址"
-            "已归一）。这**只是候选**：可能是同一份代码被整体搬移，也可能是不同源码编出"
-            "同样的指令，不作等价断言；\n"
-            "- **unresolved**：指纹重复（一侧多条同指纹）的组，不做笛卡尔积展开；\n"
-            "- **only_left / only_right**：在本次两份清单里没有精确对应。重命名、内联、"
-            "strip、字节变动、发现不全都能解释，**不证明源码有增删**。\n"
-            "覆盖度永远报 inventory_complete=false：本工具不知道「本该有多少个函数」。\n"
-            "两侧共用一套 arch/endian/bits/thumb/entry（同一颗芯片的两个版本）；"
-            "两侧架构不同会直接报错，不做跨指令集比对。裸 bin 必须显式给 arch。\n"
-            "reference_sig / target_sig 可以直接给**已保存的指纹库**（省掉重复分析）；"
-            "save_reference_sig 把参考侧指纹库存盘复用（默认不覆盖既有库）。"
-        ),
-    )
-    async def recover_diff(reference: str, target: str,
-                           reference_sig: str = "", target_sig: str = "",
-                           save_reference_sig: str = "", overwrite_sig: bool = False,
-                           reference_base: int = 0, target_base: int = 0,
-                           arch: str = "", endian: str = "", bits: int = 0,
-                           thumb: bool = False, entry: int = 0,
-                           min_insns: int = 6, full: bool = False,
-                           max_rows: int = 40) -> str:
-        try:
-            out = _recover.compare_images(
-                str(reference or "").strip(), str(target or "").strip(),
-                reference_base=int(reference_base or 0),
-                target_base=int(target_base or 0),
-                reference_sig=str(reference_sig or "").strip(),
-                target_sig=str(target_sig or "").strip(),
-                save_reference_sig=str(save_reference_sig or "").strip(),
-                overwrite_sig=bool(overwrite_sig),
-                arch=str(arch or ""), endian=str(endian or ""), bits=int(bits or 0),
-                thumb=(None if not thumb else True), entry=int(entry or 0),
-                min_insns=int(min_insns or 6), full=bool(full),
-                max_rows=int(max_rows or 40))
-            return _js(out)
-        except Exception as e:  # noqa: BLE001
-            return _js({"ok": False, "error": str(e)})
-
+    # 批次109：原 recover_diff（函数配对 / 库函数指纹 FID）已并入 recover_bindiff，
+    # 走 mode="fid" 一个入口——两者都在回答「这两份镜像里，哪个函数是哪个」。
     @server.tool(
         name="recover_project",
         title="固件逆向：生成能打开的工程骨架（.sct/.ld + 向量表 + 符号头 + 汇编）",
@@ -8253,7 +8201,17 @@ def create_server(host: str = "127.0.0.1", port: int = 4823,
         name="recover_bindiff",
         title="固件逆向：两镜像逐函数差分（PASS / RESIDUE / FAIL + 外设窗口）",
         description=(
-            "逐函数比两张镜像，出三态报告，不是逐字节 diff。\n"
+            "逐函数比两张镜像。两种模式（mode）：\n"
+            "• `mode=insn`（默认）：出三态报告，不是逐字节 diff。\n"
+            "• `mode=fid`：**函数配对 / 库函数指纹识别（FID）**——reference 通常是带符号的"
+            "axf/elf 或一份已存指纹库，target 是剥离符号的裸固件；给出 basis=name（同名对上，"
+            "`bytes_equal` 才说明函数体字节相同）/ basis=bytes（函数体 SHA-256 相同且有区间证据）/ "
+            "basis=insn_fingerprint（规范化指令序列相同，**只是候选**）/ only_left / only_right / "
+            "unresolved（指纹重复，不做笛卡尔积）。该模式下参考侧可给 reference_sig / "
+            "target_sig 直接复用已存指纹库，save_reference_sig 把参考侧指纹库存盘"
+            "（overwrite_sig=true 才覆盖）。archive 侧的 arch/endian/bits/thumb/entry 由两模式共用，"
+            "裸 bin 必须显式给 arch。\n"
+            "（批次109：原 recover_diff 并入本工具。）\n"
             "PASS：规范化指令序列相同（可执行区间里的地址已归一成 <CODE>）或函数体字节相同；\n"
             "RESIDUE：把所有立即数都抹平后序列相同（差异只在地址/常量），或相似度 ≥ threshold，"
             "逐条列出差异指令，必须人工看一眼是哪一类常量；\n"
@@ -8264,15 +8222,47 @@ def create_server(host: str = "127.0.0.1", port: int = 4823,
             "给 out_dir 就落报告（report.json / report.md / windows.csv，utf-8 无 BOM + "
             "evidence_only 标记 + 构建目录拒写）。\n"
             "限制：函数清单完整度未知，missing_in_* 不单独证明源码有增删；PASS 只说明机器码没变，"
-            "不证明运行行为相同。"
+            "不证明运行行为相同。mode=fid 下覆盖度永远报 inventory_complete=false——"
+            "本工具不知道「本该有多少个函数」，且不同源码编出同样指令时会被配成候选，不作等价断言。"
         ),
     )
     async def recover_bindiff(reference: str, target: str,
                               base: str | int = 0, base_target: str | int = 0,
                               windows: str = "", out_dir: str = "",
                               name: str = "bindiff", threshold: float = 0.9,
-                              min_insns: int = 4) -> str:
+                              min_insns: int = 4, mode: str = "",
+                              reference_sig: str = "", target_sig: str = "",
+                              save_reference_sig: str = "", overwrite_sig: bool = False,
+                              arch: str = "", endian: str = "", bits: int = 0,
+                              thumb: bool = False, entry: int = 0,
+                              full: bool = False, max_rows: int = 40) -> str:
         try:
+            _mode = (mode or "").strip().lower()
+            if _mode in ("fid", "signature", "sig", "functions", "pairing", "match"):
+                # 批次109：原 recover_diff 的路径（函数配对 + 库函数指纹）
+                out = _recover.compare_images(
+                    str(reference or "").strip(), str(target or "").strip(),
+                    reference_base=int(base or 0),
+                    target_base=int(base_target or 0),
+                    reference_sig=str(reference_sig or "").strip(),
+                    target_sig=str(target_sig or "").strip(),
+                    save_reference_sig=str(save_reference_sig or "").strip(),
+                    overwrite_sig=bool(overwrite_sig),
+                    arch=str(arch or ""), endian=str(endian or ""),
+                    bits=int(bits or 0),
+                    thumb=(None if not thumb else True), entry=int(entry or 0),
+                    min_insns=int(min_insns or 6), full=bool(full),
+                    max_rows=int(max_rows or 40))
+                if isinstance(out, dict):
+                    out.setdefault("mode", "fid")
+                return _js(out)
+            if _mode and _mode not in ("insn", "instr", "code", "bindiff", "diff"):
+                return _js({"ok": False, "mode": mode,
+                            "error_code": "invalid-argument",
+                            "error": "mode 只支持 insn（默认，逐函数三态差分）"
+                                     "或 fid（函数配对 / 库函数指纹识别）",
+                            "example_args": {"reference": "old.axf",
+                                             "target": "new.bin", "mode": "fid"}})
             out = _bindiff.compare(str(reference or "").strip(),
                                    str(target or "").strip(),
                                    base=_pi(base, "base", 0),
@@ -9573,31 +9563,6 @@ def create_server(host: str = "127.0.0.1", port: int = 4823,
         except Exception as e:  # noqa: BLE001
             return _js({"ok": False, "error": str(e)})
 
-    @server.tool(
-        name="read_project_config",
-        title="读取工程配置（编译宏/优化级别）",
-        description=(
-            "解析 .uvprojx 各 target 的编译器（AC5/AC6）、优化级别（-O0..-Otime）、编译宏 Define、"
-            "包含路径，以及 update_flash_before_debugging（Keil 的 Update Target before Debugging："
-            "为 true 时进入调试会自动把最新程序下载进 Flash，可省掉显式烧录）。"
-            "project 传 .uvprojx 路径（省略用默认工程），target 指定某 target（省略用第一个）。"
-            "排查“不同 target 行为不同”时对比宏/优化差异。注意：基于 .uvprojx 静态解析各 target 配置，需工程文件在且格式为 Keil 标准 uvprojx；不含运行时状态（优化级别/宏为工程设置值）。"
-        ),
-    )
-    async def read_project_config(project: str = "", target: str = "") -> str:
-        try:
-            p = (project or "").strip() or _builder_cfg.get("default_project", "")
-            if not p:
-                return _js({"ok": False, "error": "未提供工程路径，且未配置默认工程"})
-            cfg = _parse_uvprojx_config(p, target.strip() or None)
-            cfg["project"] = p
-            # 批次97：顺带给出字节层面的基线（编码/BOM/行尾/XML/sha256），
-            # 免得「读配置」和「查文件格式」要跑两趟。文件不在时 describe 会带 error，不抛。
-            cfg["file_format"] = _projectfile.describe(p)
-            return _js(cfg)
-        except Exception as e:  # noqa: BLE001
-            return _js({"ok": False, "error": str(e)})
-
     # ---------------- 批次6：目标器件信息 / 采样剖析 / 环境自检引导 ----------------
     @server.tool(
         name="target_info",
@@ -10710,11 +10675,14 @@ def create_server(host: str = "127.0.0.1", port: int = 4823,
             "返回 {environment:{...}, recommended_workflow:[...], scene_tools:{...}}。注意：建议 AI 落地第一件事先调本工具获取环境自检与工作流，再按场景选择工具；自检为无副作用只读操作，可在任意时刻调用。"
             "topic=tool, name=<工具名> 取回该工具被挪出上下文的**完整说明**（为省上下文，长描述在工具列表里只留一句话摘要，正文全文存在这里）；"
             "topic=tool 不带 name 则列出全部已归档工具与描述档位。"
+            "topic=capabilities 给出**能力自检**（批次109 起原 capabilities 工具的正文并到这里）：两条调试通道是否可用、内置模块就绪情况、环境与工具面计数——冷启动拿不准「这台上到底有什么」时用它。"
         ),
     )
     async def mdk_guide(topic: str = "", name: str = "") -> str:
         try:
             _t = (topic or "").strip().lower()
+            if _t in ("capabilities", "capability", "caps", "cap", "surface", "ability"):
+                return await _capabilities_payload()
             if _t in ("tool", "tools", "desc", "description") or (name or "").strip():
                 return _js(_guide_tool(_t, name, server))
             host = getattr(_client, "host", "127.0.0.1")
@@ -10753,7 +10721,7 @@ def create_server(host: str = "127.0.0.1", port: int = 4823,
                 "4. 排查现场：diagnose 一次聚合 寄存器+反汇编+调用栈+局部变量",
                 "5. 排查崩溃：fault_report 看异常类型+现场；wait_fault 复现异常",
                 "6. 性能：profile_sampling 找热点函数，profile_function 测单函数耗时",
-                "7. 行为不同：project_targets/set_debug_target/read_project_config 对比 target 宏/优化",
+                "7. 行为不同：project_targets/set_debug_target/uvprojx_read(what=config) 对比 target 宏/优化",
                 "8. 改代码上板：build_and_flash / flash_debug；收尾 exit_debug 退出调试",
                 "9. 看串口日志：serial_monitor_start(port=\"COM9\") → run → serial_read(since=上次next_seq) → serial_monitor_stop"
                 "（串口用完就还：exit_debug/烧录/关 Keil 都会自动释放端口，释放后已收日志仍可 serial_read）",
@@ -10766,7 +10734,7 @@ def create_server(host: str = "127.0.0.1", port: int = 4823,
                 "崩溃死机复位循环": "fault_report / wait_fault / diagnose",
                 "性能热点": "profile_sampling / profile_function / dwt",
                 "内存被改坏": "set_watchpoint / search_mem / snapshot_diff",
-                "不同target行为不同": "project_targets / set_debug_target / read_project_config",
+                "不同target行为不同": "project_targets / set_debug_target / uvprojx_read(what=config)",
                 "串口不打印/时钟问题": "list_peripherals / read_peripheral / itm_trace",
                 "抓宿主机串口日志(rt_kprintf/ULOG)": "serial_monitor_start / serial_read / serial_monitor_stop",
                 "串口下发命令/数据(一边收一边发)": "serial_monitor_start（持有端口）→ serial_write → serial_read",
@@ -10774,7 +10742,8 @@ def create_server(host: str = "127.0.0.1", port: int = 4823,
                 "改代码重新上板": "build_and_flash / flash_debug",
             }
             return _js({"ok": True, "environment": env,
-                        "recommended_workflow": workflow, "scene_tools": scene_tools})
+                        "recommended_workflow": workflow, "scene_tools": scene_tools,
+                        "next": "看完整能力自检：mdk_guide(topic=capabilities)；查某工具准确参数：list_tools；装卸工具面：toolset"})
         except Exception as e:  # noqa: BLE001
             return _js({"ok": False, "error": str(e)})
 
@@ -11130,8 +11099,13 @@ def create_server(host: str = "127.0.0.1", port: int = 4823,
         title="只读查看 uVision 工程配置（target/包含路径/分组文件）",
         description=(
             "读 .uvprojx（Keil 工程文件）里的关键配置，**不做任何写入**。what 取值："
-            "`targets`（有哪些 target）、`config`（某 target 的器件/包含路径/宏/输出名/优化等级）、"
+            "`targets`（有哪些 target）、`config`（某 target 的器件/包含路径/宏/输出名/"
+            "编译器 AC5/AC6/优化等级/优化等级原文，以及 update_flash_before_debugging——"
+            "Keil 的「调试前更新目标」：为 true 时进入调试会自动把最新程序下载进 Flash，"
+            "可省掉显式烧录）、"
             "`groups`（工程分组与各组源文件）、`all`（默认，三者都给）。target 为空时用第一个。"
+            "（批次109：原 read_project_config 已并入本工具的 config 块，"
+            "编译器/优化/宏/flash 自动下载都在 `compile` 里。）"
             "用途：AI 在改工程前先看清现状——本服务多个工具（build/flash/set_debug_target）"
             "都吃 target 名，名字打错很费时间，先跑本工具拿到准确名字。"
             "改工程用 uvprojx_edit。解析用 ElementTree 只读打开，**不会**回写文件。"
@@ -11148,6 +11122,18 @@ def create_server(host: str = "127.0.0.1", port: int = 4823,
                 out["targets"] = _uvprojx.list_targets(p)
             if w in ("all", "config"):
                 out["config"] = _uvprojx.read_config(p, target or "")
+                # 批次109：并入原 read_project_config——同一份 .uvprojx 的编译器类型、
+                # 优化级别、宏与「调试前更新目标」，原先要另跑一个工具才拿得到。
+                _cc = _parse_uvprojx_config(p, target or "")
+                if _cc.get("ok"):
+                    out["compile"] = {
+                        "current": _cc.get("current"),
+                        "targets": [t.get("name") for t in (_cc.get("targets") or [])],
+                        "note": "compiler/optimization/defines/include_paths/"
+                                "update_flash_before_debugging 都是工程设置值，不是运行时状态",
+                    }
+                else:
+                    out["compile"] = _cc
             if w in ("all", "groups"):
                 out["groups"] = _uvprojx.list_groups(p)
             # 批次97：把「这份工程文件的格式基线」一起给出去——编码/BOM/行尾/XML/sha256。
@@ -11335,23 +11321,10 @@ def create_server(host: str = "127.0.0.1", port: int = 4823,
         except Exception as e:  # noqa: BLE001
             return _js({"ok": False, "file": file, "line": line, "error": str(e)})
 
-    @server.tool(
-        name="capabilities",
-        title="能力自检（本服务能做什么、哪条通道现在通）",
-        description=(
-            "冷启动第一步的**能力自检**：一次看清这台上有什么可用、以及每条通道当前通不通，"
-            "避免 AI 拿不存在的功能去试错。返回四块：\n"
-            "1. `channels`：两条调试通道的可用性——`uvsock`（交互式，需 Keil 运行且 UVSOCK 已开）"
-            "与 `uv4_cmdline`（UV4 -d 批处理，不依赖 UVSOCK）；附各自实测结论与何时该用哪条。\n"
-            "2. `modules`：本服务内置模块是否就绪——uvprojx 编辑、CMSIS-SVD 解码、"
-            "Keil 报错知识库（含已实测的命令错误码条数）、串口监视、构建器等。\n"
-            "3. `env`：UV4 路径、默认工程、符号文件来源、端口、工具裁剪设置。\n"
-            "4. `tool_surface`：当前暴露的工具数（受 MDKDEBUG_TOOLSETS 影响），以及推荐工作流。\n"
-            "与 keil_health 的分工：keil_health 做**诊断**（坏了帮你定位坏在哪一环），"
-            "capabilities 做**枚举**（有什么、哪条路现在能走）。"
-        ),
-    )
-    async def capabilities() -> str:
+    # 批次109：能力自检并入 mdk_guide(topic="capabilities")。两者都在回答同一个问题
+    # 「这台上能做什么、哪条路现在通」，分成两个入口只会让 AI 在两者之间二选一。
+    # 实现原样留在这里，由 mdk_guide 的一个分支调用（工具名 capabilities 不再单独注册）。
+    async def _capabilities_payload() -> str:
         try:
             ch = {}
             ver = None
@@ -11471,7 +11444,8 @@ def create_server(host: str = "127.0.0.1", port: int = 4823,
                 pass
             return _js({"ok": True, "channels": ch, "modules": mods, "env": env,
                         "non_mdk": non_mdk, "tool_surface": surface,
-                        "recommended": ["capabilities 看能做什么", "keil_health 看现在通不通",
+                        "recommended": ["mdk_guide(topic=capabilities) 看能做什么",
+                        "keil_health 看现在通不通",
                                         "list_tools 查准确参数名",
                                         "mdk_guide 看典型工作流",
                                         "target_list / toolchain_list 看非 MDK 链路"]})
@@ -11682,15 +11656,20 @@ def create_server(host: str = "127.0.0.1", port: int = 4823,
             "**默认只暴露 core 组**（调试核心 + 环境引导），其余组用到时现装——"
             "这样上下文里只放当前真正用得上的工具描述，工具多的时候这是省上下文的主要手段。"
             "action=status 看当前暴露了哪些组、各组多少个、还差什么；"
+            "action=groups 看组总览（toolsets 留空）或列出某组/某档里的工具名"
+            "（toolsets=mem、toolsets=nano）；"
             "action=load 把 toolsets 指定的组装回来（例：toolsets=mem,trace，"
             "toolsets=all 一次全装，toolsets=nano 极简）；"
             "action=unload 把某组收起来（例：toolsets=trace）。"
+            "（批次109：原 tools_groups / tools_load 两个入口已并入本工具，"
+            "老参数名 group / unload 仍可用。）"
             "可用组与含义：" + _toolbox.group_catalog() + "。"
             "**装卸后工具面立即变化，但很多 MCP 客户端缓存了工具列表**："
             "若装完仍报未知工具，先重新拉一次 tools/list 再调。"
-            "list_tools / get_version / capabilities / toolset 这四个永远保留。"
-            "**小上下文模型**：先 tools_groups() 看有哪些组，再 tools_load(group=...) "
-            "现装；或直接以 MDKDEBUG_TOOLSETS=nano 启动，只暴露十几个最短入口。"
+            "list_tools / get_version / mdk_guide / toolset 这四个永远保留。"
+            "**小上下文模型**：先 toolset(action=groups) 看有哪些组，"
+            "再 toolset(action=load, toolsets=...) 现装；"
+            "或直接以 MDKDEBUG_TOOLSETS=nano 启动，只暴露十几个最短入口。"
         )
 
     @server.tool(
@@ -11701,30 +11680,29 @@ def create_server(host: str = "127.0.0.1", port: int = 4823,
     async def toolset_tool(action: str = "status", toolsets: str = "") -> str:
         try:
             act = (action or "status").strip().lower()
-            if act == "status":
+            if act in ("status", "state"):
                 return _js(_toolbox.status(server))
-            if act == "load":
-                return _js(_toolbox.load(toolsets, server))
-            if act == "unload":
-                return _js(_toolbox.unload(toolsets, server))
+            if act in ("groups", "group", "list"):
+                # 批次109：原 tools_groups 的总览/列组并到这里（toolsets 当组名用）
+                return await _toolset_groups(toolsets)
+            if act in ("load", "unload"):
+                r = (_toolbox.load if act == "load" else _toolbox.unload)(toolsets, server)
+                if not r.get("ok"):
+                    r.setdefault("reason", "toolset-unknown-group")
+                    r.setdefault("error_code", r.get("reason"))
+                return _js(r)
             return _js({"ok": False, "action": action,
-                        "error": "action 只能是 status / load / unload",
+                        "error": "action 只能是 status / groups / load / unload",
                         "reason": "toolset-bad-action",
                         "hint": "例：action=load, toolsets=mem,trace",
                         "example_args": {"action": "load", "toolsets": "mem,trace"}})
         except Exception as e:  # noqa: BLE001
             return _js({"ok": False, "error": str(e)})
 
-    @server.tool(
-        name="tools_groups",
-        title="列工具分组与当前装载（精简）",
-        description=(
-            "列出工具分组（含 nano 极简档）与当前是否已装进上下文。"
-            "group 留空给总览；给了组名则列出该组工具名。"
-            "小上下文模型从这里挑组，再 tools_load(group=...) 装上。"
-        ),
-    )
-    async def tools_groups(group: str = "") -> str:
+    # 批次109：tools_groups 并入 toolset(action="groups")——两者本来就是同一份
+    # `_toolbox.status()` 的两层壳（toolset 还有 load/unload）。函数体保留，改由
+    # toolset 的分支调用；工具名 tools_groups 不再单独注册。
+    async def _toolset_groups(group: str = "") -> str:
         try:
             st = _toolbox.status(server)
             if not st.get("ok"):
@@ -11738,13 +11716,14 @@ def create_server(host: str = "127.0.0.1", port: int = 4823,
                                 "error_code": "toolset-unknown-group",
                                 "error": "没有这个组/档：%s" % g,
                                 "available_groups": st.get("available_groups"),
-                                "hint": "组名见 tools_groups() 总览；也可直接用 all / nano"})
+                                "hint": "组名见 toolset(action=groups) 总览；"
+                                        "也可直接用 all / nano"})
                 hidden = set(st.get("hidden_tools") or [])
                 return _js({"ok": True, "group": g, "size": len(names), "tools": names,
                             "exposed": [n for n in names if n not in hidden],
                             "hidden": [n for n in names if n in hidden],
-                            "note": "看某组里有什么；把这一组装上用 tools_load，"
-                                    "group 参数就填这个组名"})
+                            "note": "看某组里有什么；把这一组装上用 "
+                                    "toolset(action=load, toolsets=这个组名)"})
             groups = {k: {"size": v["size"], "loaded": v["loaded"], "note": v["note"]}
                       for k, v in (st.get("groups") or {}).items()}
             return _js({"ok": True, "desc_mode": _thin.stats()["mode"],
@@ -11752,44 +11731,14 @@ def create_server(host: str = "127.0.0.1", port: int = 4823,
                         "total_registered": st.get("total_registered"),
                         "loaded_groups": st.get("loaded_groups"),
                         "groups": groups, "profiles": st.get("profiles"),
-                        "hint": "装某组：tools_load(group=组名)；全装 group=all；"
-                                "极简档 group=nano；看某个组里有什么："
-                                "tools_groups(group=组名)"})
+                        "hint": "装某组：toolset(action=load, toolsets=组名)；"
+                                "全装 toolsets=all；极简档 toolsets=nano；"
+                                "看某个组里有什么：toolset(action=groups, toolsets=组名)"})
         except Exception as e:  # noqa: BLE001
             return _js({"ok": False, "error": str(e)})
 
-    @server.tool(
-        name="tools_load",
-        title="按组装载工具（含 nano 极简档）",
-        description=(
-            "把 group 指定的组装进工具面（unload=true 则收起）。"
-            "group 可写单个组名、逗号分隔多个、或 all / nano。"
-            "装完若客户端仍报未知工具，重新拉一次 tools/list（客户端会缓存工具列表）。"
-        ),
-    )
-    async def tools_load(group: str = "", unload: bool = False) -> str:
-        try:
-            g = (group or "").strip()
-            if not g:
-                return _js({"ok": False, "error": "group 不能为空",
-                            "reason": "toolset-bad-action",
-                            "error_code": "toolset-bad-action",
-                            "hint": "例：group=mem、group=mem,trace、group=all、group=nano",
-                            "example_args": {"group": "mem,trace"}})
-            r = _toolbox.unload(g, server) if unload else _toolbox.load(g, server)
-            if not r.get("ok"):
-                r.setdefault("reason", "toolset-unknown-group")
-                r.setdefault("error_code", r.get("reason"))
-                return _js(r)
-            return _js({"ok": True,
-                        "action": r.get("action") or ("unload" if unload else "load"),
-                        "groups": r.get("groups"),
-                        "loaded": r.get("loaded"), "unloaded": r.get("unloaded"),
-                        "exposed": r.get("exposed"), "hidden": r.get("hidden"),
-                        "loaded_groups": r.get("loaded_groups"),
-                        "note": r.get("note"), "client_note": r.get("client_note")})
-        except Exception as e:  # noqa: BLE001
-            return _js({"ok": False, "error": str(e)})
+    # 批次109：tools_load 并入 toolset(action=load|unload)——同一份 _toolbox.load/unload，
+    # 少一层外壳（参数名 group 与 toolsets 的差异由 aliases 兜住）。
 
     @server.tool(
         name="list_tools",

@@ -316,7 +316,7 @@ async def cmd_groups(server, args) -> int:
         print("  %-11s %-3d 可见 %-3d  %s" % (g["name"], g["declared"], g["visible"],
                                              g["note"]))
     print("\n常驻（未归组）%d 个；当前工具面共 %d 个。" % (len(loose), len(visible)))
-    print("装某组：调工具 tools_load(group=\"build\")，或启动前设 MDKDEBUG_TOOLSETS=all")
+    print("装某组：调工具 toolset(action=\"load\", toolsets=\"build\")，或启动前设 MDKDEBUG_TOOLSETS=all")
     return 0
 
 

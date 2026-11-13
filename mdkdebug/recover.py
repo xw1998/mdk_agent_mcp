@@ -3200,7 +3200,7 @@ def _arm_only_guard(unit: "Unit", ident: dict, what: str) -> dict | None:
                     "③ 别用 armasm 硬凑——那样会得到一份「字节对、目标错」的工程。",
             "arch": unit.arch,
             "what_would_work": ["recover_probe", "recover_symbols", "recover_disasm",
-                                "recover_diff", "image_split"]}
+                                "recover_bindiff(mode=\"fid\")", "image_split"]}
 
 
 def _ram_window(unit: "Unit", chunks: list[dict]) -> dict | None:

@@ -534,8 +534,8 @@ def group_g():
     srv_all = SV.create_server(port=PORT_TOOL, toolsets="all")
     na = tool_names(srv_all)
 
-    check("G1 注册总数 232", len(na) == 232, len(na))
-    check("G2 默认只暴露 45 个", len(nd) == 45, len(nd))
+    check("G1 注册总数 227", len(na) == 227, len(na))
+    check("G2 默认只暴露 42 个", len(nd) == 42, len(nd))
     check("G3 code 组默认收起（7 个 code_* 都不在默认面）",
           not any(t.startswith("code_") for t in nd),
           [t for t in nd if t.startswith("code_")])
@@ -544,21 +544,21 @@ def group_g():
     check("G5 组数 12，且每组都有用途说明",
           len(TB.TOOLSETS) == 12 and len(TB.GROUP_NOTES) == 12
           and "code" in TB.GROUP_NOTES, (len(TB.TOOLSETS), len(TB.GROUP_NOTES)))
-    check("G6 高输出工具 48 个", len(OC.HIGH_OUTPUT) == 48, len(OC.HIGH_OUTPUT))
+    check("G6 高输出工具 47 个", len(OC.HIGH_OUTPUT) == 47, len(OC.HIGH_OUTPUT))
     st = call_sync(srv_def, "toolset", {"action": "status"})
     grp = (st.get("groups") or {}).get("code") or {}
     check("G7 toolset(status) 列得出 code 组与规模 7", grp.get("size") == 7, grp)
     r = call_sync(srv_def, "toolset", {"action": "load", "toolsets": "code"})
-    check("G8 toolset(load, code) 装回 7 个，暴露数 45→52",
+    check("G8 toolset(load, code) 装回 7 个，暴露数 42→49",
           r.get("ok") is True and len(r.get("loaded") or []) == 7
-          and r.get("exposed") == 52, r)
+          and r.get("exposed") == 49, r)
     srv_fresh = SV.create_server(port=PORT_DEF + 2, toolsets=None)
-    cap = call_sync(srv_fresh, "capabilities", {})
+    cap = call_sync(srv_fresh, "mdk_guide", {"topic": "capabilities"})
     surf = cap.get("tool_surface") or {}
-    check("G9 capabilities 的 tool_surface 里 code=7 且列为「未装载」、总数 232",
+    check("G9 mdk_guide(topic=capabilities) 的 tool_surface 里 code=7 且列为「未装载」、总数 227",
           (surf.get("groups") or {}).get("code") == 7
           and "code" in (surf.get("not_loaded_groups") or [])
-          and surf.get("registered_total") == 232, surf)
+          and surf.get("registered_total") == 227, surf)
 
 def main():
     print("批次70：汇编（.s/.S/.asm）进代码索引")

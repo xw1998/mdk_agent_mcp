@@ -98,7 +98,7 @@ _TEXT_RULES = [
      "#error 指令被触发",
      "源码里的守卫条件不满足（常见：芯片宏没定义、HAL 配置不一致、条件编译走错分支）",
      ["看 #error 后面的自定义提示文字，它通常直接说明缺什么宏",
-      "核对工程 target 的 Define 是否与板子一致（read_project_config 可对比不同 target）"],
+      "核对工程 target 的 Define 是否与板子一致（uvprojx_read(what=config) 可对比不同 target）"],
      35),
     (r"incompatible\s+redefinition\s+of\s+macro|macro\s+redefined",
      "宏重复定义且不一致",

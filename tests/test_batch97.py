@@ -14,7 +14,7 @@
   A 体检：编码/BOM/行尾/混合行尾/非 ASCII/U+FFFD/XML 可解析/sha256
   B 安全写入：往返校验、原编码严格编码、XML 校验、原子写、写后回读
   C 三个写入接入点（uvprojx / uvoptx / cmdscript）全部改走安全写入器
-  D 工具层：project_file_check 只读体检工具（232 个工具、在 build 组、不在默认面）
+  D 工具层：project_file_check 只读体检工具（227 个工具、在 build 组、不在默认面）
   E 文档纪律：SKILL 硬规则 + PITFALLS + README
   F 闸门：零新增依赖
 
@@ -324,8 +324,8 @@ def section_d():
         return names, out
 
     names, out = asyncio.run(run())
-    check("D1 project_file_check 已注册，工具总数 232",
-          "project_file_check" in names and out["count"] == 232, out["count"])
+    check("D1 project_file_check 已注册，工具总数 227",
+          "project_file_check" in names and out["count"] == 227, out["count"])
     check("D2 在 build 组、不在默认面（会写工程的工具都不进默认面）",
           "project_file_check" in TB.TOOLSETS["build"]
           and "project_file_check" not in TB.TOOLSETS["core"], None)
@@ -343,7 +343,7 @@ def section_d():
 # G. 读入口自带格式基线（一眼看清，不用跑两趟）
 # ----------------------------------------------------------------------
 def section_g():
-    print("G. 读入口自带格式基线：uvprojx_read / read_project_config / list_uvoptx_breakpoints")
+    print("G. 读入口自带格式基线：uvprojx_read(what=config) / list_uvoptx_breakpoints")
     from mdkdebug import server as SV
 
     # 造一份「已损坏」的工程副本（截断），验证读入口会提醒
@@ -359,7 +359,7 @@ def section_g():
 
         return {
             "read": await _call("uvprojx_read", {"project": REAL_PROJ, "what": "targets"}),
-            "cfg": await _call("read_project_config", {"project": REAL_PROJ}),
+            "cfg": await _call("uvprojx_read", {"project": REAL_PROJ, "what": "config"}),
             "optx": await _call("list_uvoptx_breakpoints", {"project": REAL_PROJ}),
             "broken": await _call("uvprojx_read", {"project": broken}),
         }
@@ -371,7 +371,7 @@ def section_g():
           out["read"].get("ok") and ff.get("sha256") == ref["sha256"]
           and ff.get("encoding") == ref["encoding"] and ff.get("newline") == ref["newline"]
           and ff.get("level") == "ok", ff)
-    check("G2 read_project_config 也带 file_format（读配置不必再跑一趟查格式）",
+    check("G2 uvprojx_read(what=config) 也带 file_format（读配置不必再跑一趟查格式）",
           out["cfg"].get("file_format", {}).get("sha256") == ref["sha256"],
           out["cfg"].get("file_format"))
     check("G3 list_uvoptx_breakpoints 带 .uvoptx 的 file_format（CRLF/非 ASCII 如实报告）",
@@ -479,8 +479,8 @@ def section_h():
         return names, out, rbytes(p4) == snap_before
 
     names, out, untouched = asyncio.run(run())
-    check("H8 project_file_repair 已注册（工具总数 232），默认 dry_run 且不写文件",
-          "project_file_repair" in names and len(names) == 232
+    check("H8 project_file_repair 已注册（工具总数 227），默认 dry_run 且不写文件",
+          "project_file_repair" in names and len(names) == 227
           and out.get("dry_run") is True
           and all(f.get("changed") is False for f in out.get("files") or [])
           and untouched, out)

@@ -110,10 +110,10 @@ def section_a():
     check("A1 六个新工具都注册了",
           all(n in names for n in NEW_TOOLS),
           [n for n in NEW_TOOLS if n not in names])
-    check("A2 注册总数 232（批次106 后为 232，本批 +6）",
-          len(names) == 232, len(names))
-    check("A3 build 组 45 个（批次105 后为 44，本批 +6）",
-          len(TB.TOOLSETS["build"]) == 45, len(TB.TOOLSETS["build"]))
+    check("A2 注册总数 227（批次106 后为 227，本批 +6）",
+          len(names) == 227, len(names))
+    check("A3 build 组 43 个（批次105 后为 44，本批 +6）",
+          len(TB.TOOLSETS["build"]) == 43, len(TB.TOOLSETS["build"]))
     check("A4 六个都只归一组且归到 build",
           all(sum(1 for g in TB.TOOLSETS if n in TB.TOOLSETS[g]) == 1
               and n in TB.TOOLSETS["build"] for n in NEW_TOOLS),

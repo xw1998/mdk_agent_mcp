@@ -16,7 +16,7 @@
    要用别的组，调 `toolset(action="load", toolsets="mem,trace")` 装回来。
 2. **显式设了但认不出来 → 不裁剪（全开）+ 告警**：宁可少裁不错杀。
    一个手滑的组名不该静默缩减用户的工具面（那会让人以为"配置生效了"）。
-3. **`list_tools` / `get_version` / `capabilities` / `toolset` / `tools_groups` / `tools_load` 永远保留**：
+3. **`list_tools` / `get_version` / `mdk_guide` / `toolset` 永远保留**：
    否则 AI 连「现在有哪些工具、怎么装回来」都问不出来，会陷入瞎试。
 4. **未归类的工具一律保留**，只裁「明确归到别的组」的工具。
 5. 装卸都按原始注册顺序重排，并对调用方明说「客户端可能缓存了工具列表」。
@@ -90,7 +90,8 @@ TOOLSETS = {
         "project_file_check",
         "project_file_repair",
         "scatter_read", "scatter_edit", "scatter_check", "project_targets", "set_debug_target",
-        "read_project_config",
+        # 批次109：原 read_project_config 已并入 uvprojx_read(what=config) 的 `compile` 块，
+        # 不再单独注册（同一份 .uvprojx 的两种读法，没必要两个入口）。
         # 批次77：固件契约预检（只读）与「编译→烧录→串口等令牌」闭环入口。
         # 两者都围绕「这次烧进去的固件能不能自证跑起来了」，与编译烧录同场景。
         "firmware_precheck", "build_flash_verify",
@@ -106,9 +107,9 @@ TOOLSETS = {
         # 批次80：字节精确的重链接工程 + 自证。recover_project_exact 会写文件、
         # recover_verify 会写 build/ 并调 armasm/armlink/UV4，两者都不进默认面。
         "recover_project_exact", "recover_verify",
-        # 批次86：库指纹与函数匹配（同一颗芯片两个版本的比对 / FID 库识别）。
-        # 只读，属逆向场景，不进默认面。
-        "recover_diff",
+        # 批次86/109：库指纹与函数匹配（同一颗芯片两个版本的比对 / FID 库识别）。
+        # 只读，属逆向场景，不进默认面。原 recover_diff 已并入
+        # recover_bindiff(mode="fid")，不再单独注册。
         # 批次88：闭环台账。默认会跑 recover_verify（写 build/、调 armasm/armlink/UV4），
         # 不进默认面，也不进只读白名单。
         "recover_ledger",
@@ -213,19 +214,21 @@ TOOLSETS = {
 
 # 永远保留：这几个是「问工具面 / 装卸工具面」的入口，裁掉它们 AI 会
 # 陷入瞎试——连「现在有哪些工具、怎么装回来」都问不出来。
-ALWAYS = {"list_tools", "get_version", "capabilities", "toolset",
-          "tools_groups", "tools_load"}
+# 批次109：原 capabilities / tools_groups / tools_load 三个入口已分别并入
+# mdk_guide(topic="capabilities") 与 toolset(action="groups"/"load"/"unload")，
+# 常驻集合从 6 个收敛到 4 个——问工具面与装卸工具面各留一个入口就够。
+ALWAYS = {"list_tools", "get_version", "mdk_guide", "toolset"}
 
 # nano 极简档（批次56）：**小上下文模型**的最小可用面。
 # 它不是「组」而是一个**档位**（profile）——这批工具横跨 core/build/trace 三组，
-# 用「组」表达不了。toolset(toolsets=nano) 与 tools_load(group=nano) 都认它。
+# 用「组」表达不了。toolset(action=load, toolsets=nano) 与启动参数都认它。
 NANO_TOOLS = (
     "keil_health", "build_and_flash",            # 健康检查 / 编译烧录
     "enter_debug", "exit_debug", "run", "stop",  # 进出调试 / 跑停
     "read_mem", "write_mem", "read_variable",    # 内存与变量
     "set_breakpoint", "clear_breakpoint",        # 断点
     "trace_swd_read",                            # 读 trace
-    "tools_groups", "tools_load",                # 装卸入口本身
+    "toolset",                                   # 问/装卸工具面的唯一入口
     # 取回入口必须在这个档里：描述瘦成一句摘要后，正文全靠 mdk_guide 取回——
     # 指针指着一个装不上的工具，就是「看似权威的错答案」。
     "mdk_guide",
