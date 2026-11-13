@@ -210,6 +210,7 @@ _SPEC = {
                          "symbol": ["name", "func", "function"],
                          "entryname": ["entry_name", "candidate_name", "cname"],
                          "args": ["arguments", "argv", "params"],
+                         "args_sets": ["argsets", "arg_sets", "multi_args"],
                          "compiler": ["cc", "toolchain", "which_cc"],
                          "opt": ["opt_level", "O", "optimize"],
                          "includes": ["inc", "include_dirs", "I"],

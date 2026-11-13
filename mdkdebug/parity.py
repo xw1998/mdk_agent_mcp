@@ -265,10 +265,75 @@ def _fmt_writes(items: list) -> list:
     return ["%s[%d]=%s" % (a, s, v) for (a, s), v in items[:50]]
 
 
+def _compare(ref_res: dict, tgt_res: dict) -> dict:
+    """比两侧一次执行的结果，给出判词与逐项差异。
+
+    判词口径：只认 r0 做返回值（AAPCS，64 位/小结构才用 r0-r1）；r1..r3 在返回那一刻
+    是 caller-saved 残留、随地址布局变，拿它们判定会把「同源重编」误判成不一致，
+    所以只报告在 same_scratch / differences.scratch_r1_r3 里，不参与判定。
+    """
+    ret_same = ref_res["return"]["r0"] == tgt_res["return"]["r0"]
+    ret_diff = {k: [ref_res["return"][k], tgt_res["return"][k]]
+                for k in ("r0", "r1", "r2", "r3")
+                if ref_res["return"][k] != tgt_res["return"][k]}
+    scratch_same = all(ref_res["return"][k] == tgt_res["return"][k]
+                       for k in ("r1", "r2", "r3"))
+    wa, wb = _writes_map(ref_res), _writes_map(tgt_res)
+    common = [k for k in wa if k in wb]
+    value_mismatch = [[k[0], k[1], wa[k], wb[k]] for k in common if wa[k] != wb[k]]
+    only_ref = [k for k in wa if k not in wb]
+    only_tgt = [k for k in wb if k not in wa]
+
+    stopped = []
+    for side, res in (("reference", ref_res), ("target", tgt_res)):
+        if res.get("stop_reason") != "returned":
+            stopped.append({"side": side, "stop_reason": res.get("stop_reason"),
+                            "events": (res.get("events") or [])[:4]})
+    if stopped:
+        verdict = "not_comparable"
+    elif not ret_same:
+        verdict = "parity_differs"
+    elif value_mismatch or only_ref or only_tgt \
+            or ref_res["writes_truncated"] or tgt_res["writes_truncated"]:
+        verdict = "parity_return_only"
+    else:
+        verdict = "parity_exact"
+
+    one = {
+        "verdict": verdict,
+        "reference": {"stop_reason": ref_res["stop_reason"],
+                      "n_insns": ref_res["n_insns"], "return": ref_res["return"],
+                      "n_writes": len(ref_res["writes"])},
+        "target": {"stop_reason": tgt_res["stop_reason"],
+                   "n_insns": tgt_res["n_insns"], "return": tgt_res["return"],
+                   "n_writes": len(tgt_res["writes"])},
+        "same_return": ret_same,
+        "same_scratch": scratch_same,
+        "writes": {"common": len(common),
+                   "same_value": len(common) - len(value_mismatch),
+                   "value_mismatch": value_mismatch[:50],
+                   "only_in_reference": _fmt_writes([(k, wa[k]) for k in only_ref])[:50],
+                   "only_in_target": _fmt_writes([(k, wb[k]) for k in only_tgt])[:50]},
+        "differences": {"return_r0": None if ret_same else ret_diff,
+                        "scratch_r1_r3": {k: [ref_res["return"][k],
+                                              tgt_res["return"][k]]
+                                          for k in ("r1", "r2", "r3")
+                                          if ref_res["return"][k]
+                                          != tgt_res["return"][k]},
+                        "return": ret_diff,
+                        "value_mismatch": value_mismatch[:50],
+                        "stopped": stopped},
+    }
+    if verdict != "parity_exact":
+        one["not_comparable_because"] = stopped
+    return one
+
+
 def run(path: str, source: str = "", base: int = 0, target: str | int = 0,
         symbol: str = "", code: str = "", entryname: str = "",
         compiler: str = "auto", cpu: str = "", opt: str = "-O2",
-        includes: str = "", args: str = "", max_insns: int = EM.DEFAULT_MAX_INSNS,
+        includes: str = "", args: str = "", args_sets: str = "",
+        max_insns: int = EM.DEFAULT_MAX_INSNS,
         stack: int = EM.DEFAULT_STACK, ram: int = 0x10000,
         timeout_us: int = 2000000, ro_base: int = 0, rw_base: int = 0,
         work_dir: str = "", keep: bool = False) -> dict:
@@ -312,12 +377,19 @@ def run(path: str, source: str = "", base: int = 0, target: str | int = 0,
                 "error": "没有候选源码：给 source（存在的 .c 文件）或 code（源码文本）"}
     if b"\x00" in code.encode("utf-8", "replace"):
         return {"ok": False, "supported": True, "error": "源码里有 NUL 字节：不是文本文件"}
+    raw_sets = [x for x in str(args_sets or "").split(";") if x.strip()]
+    if raw_sets and str(args or "").strip():
+        return {"ok": False, "supported": True,
+                "error": "args 与 args_sets 不能同时给（一个参数一个含义）",
+                "hint": "单组用 args=\"1,2\"；多组用 args_sets=\"1,2;3,4\""
+                        "（分号分隔每组，组内仍是逗号分隔的 32 位整数）"}
     try:
         argv = EM._parse_args(args)
+        case_argvs = [EM._parse_args(x) for x in raw_sets] or [argv]
     except ValueError as e:
         return {"ok": False, "supported": True,
-                "error": "args 必须是逗号分隔的 32 位整数：%s" % e,
-                "hint": "例如 args=\"1,2\"；不给则为全 0"}
+                "error": "args / args_sets 必须是逗号分隔的 32 位整数：%s" % e,
+                "hint": "例如 args=\"1,2\"；多组 args_sets=\"1,2;3,4\"；不给则为全 0"}
 
     try:
         addr = int(str(target).strip(), 0) if isinstance(target, str) else int(target or 0)
@@ -419,62 +491,65 @@ def run(path: str, source: str = "", base: int = 0, target: str | int = 0,
         img = {"regions": regions, "arch": unit.arch,
                "sha256": orig["sha256"], "container": orig["container"]}
 
-        # ---- 跑两侧 ----
-        def _go(entry_addr: int) -> dict:
-            return EM._run_one(img, entry_addr, argv,
+        # ---- 跑两侧（多组输入时每组都从头各跑一次，互不继承内存）----
+        def _go(entry_addr: int, cav: list) -> dict:
+            return EM._run_one(img, entry_addr, cav,
                                max_insns=int(max_insns or EM.DEFAULT_MAX_INSNS),
                                stack=int(stack or EM.DEFAULT_STACK),
                                ram=int(ram or 0x10000),
                                timeout_us=int(timeout_us or 0))
 
-        try:
-            ref_res = _go(start)
-        except Exception as e:  # noqa: BLE001
-            return {"ok": False, "supported": True, "verdict": "not_comparable",
-                    "stage": "reference", "error_code": "emulate_failed",
-                    "error": "%s: %s" % (type(e).__name__, e),
-                    "hint": "常见原因：镜像段与候选段落在同一页（改 ro_base/rw_base）"}
         cand_addr = (_find_in_axf(lk["axf"], ent_name)
                      or int(cand.get("entry") or 0))
         if not cand_addr:
             return {"ok": False, "supported": True, "verdict": "not_comparable",
                     "stage": "candidate_entry", "error_code": "entry_not_found",
                     "error": "链接出来的 axf 里找不到候选函数 %r" % ent_name}
-        try:
-            tgt_res = _go(cand_addr | 1)
-        except Exception as e:  # noqa: BLE001
-            return {"ok": False, "supported": True, "verdict": "not_comparable",
-                    "stage": "target", "error_code": "emulate_failed",
-                    "error": "%s: %s" % (type(e).__name__, e)}
 
-        # ---- 比对 ----
-        # AAPCS：返回值在 r0（64 位/小结构用 r0-r1）。r1..r3 在返回那一刻是
-        # caller-saved 残留，随地址布局变——拿它们做判词会把「同源重编」误判成不一致，
-        # 所以只报告、不参与判词。
-        ret_same = ref_res["return"]["r0"] == tgt_res["return"]["r0"]
-        ret_diff = {k: [ref_res["return"][k], tgt_res["return"][k]]
-                    for k in ("r0", "r1", "r2", "r3")
-                    if ref_res["return"][k] != tgt_res["return"][k]}
-        scratch_same = all(ref_res["return"][k] == tgt_res["return"][k]
-                           for k in ("r1", "r2", "r3"))
-        wa, wb = _writes_map(ref_res), _writes_map(tgt_res)
-        common = [k for k in wa if k in wb]
-        value_mismatch = [[k[0], k[1], wa[k], wb[k]] for k in common if wa[k] != wb[k]]
-        only_ref = [k for k in wa if k not in wb]
-        only_tgt = [k for k in wb if k not in wa]
+        single = len(case_argvs) == 1
+        cases = []
+        for cav in case_argvs:
+            one = {"args": ["0x%08X" % x for x in cav]}
+            try:
+                ref_res = _go(start, cav)
+            except Exception as e:  # noqa: BLE001
+                err = {"verdict": "not_comparable", "stage": "reference",
+                       "error_code": "emulate_failed",
+                       "error": "%s: %s" % (type(e).__name__, e)}
+                if single:
+                    err["hint"] = ("常见原因：镜像段与候选段落在同一页"
+                                   "（改 ro_base/rw_base）")
+                    return dict({"ok": False, "supported": True}, **err)
+                cases.append(dict(one, **err))
+                continue
+            try:
+                tgt_res = _go(cand_addr | 1, cav)
+            except Exception as e:  # noqa: BLE001
+                err = {"verdict": "not_comparable", "stage": "target",
+                       "error_code": "emulate_failed",
+                       "error": "%s: %s" % (type(e).__name__, e)}
+                if single:
+                    return dict({"ok": False, "supported": True}, **err)
+                cases.append(dict(one, **err))
+                continue
+            one.update(_compare(ref_res, tgt_res))
+            cases.append(one)
 
-        stopped = []
-        for side, res in (("reference", ref_res), ("target", tgt_res)):
-            if res.get("stop_reason") != "returned":
-                stopped.append({"side": side, "stop_reason": res.get("stop_reason"),
-                                "events": (res.get("events") or [])[:4]})
-        if stopped:
-            verdict = "not_comparable"
-        elif not ret_same:
+        # ---- 汇总 ----
+        counts = {"parity_exact": 0, "parity_return_only": 0,
+                  "parity_differs": 0, "not_comparable": 0}
+        for c in cases:
+            counts[c["verdict"]] = counts.get(c["verdict"], 0) + 1
+        # 聚合口径（多组时顶层 verdict 取「最硬」的那一条，分布看 summary.counts）：
+        #   有一组真不一致 → parity_differs（一组反例就足以否证等价）；
+        #   否则有「返回值对但写内存对不上」 → parity_return_only；
+        #   再否则有一组跑不完 → not_comparable；全部一致才是 parity_exact。
+        if counts["parity_differs"]:
             verdict = "parity_differs"
-        elif value_mismatch or only_ref or only_tgt \
-                or ref_res["writes_truncated"] or tgt_res["writes_truncated"]:
+        elif counts["parity_return_only"]:
             verdict = "parity_return_only"
+        elif counts["not_comparable"]:
+            verdict = "not_comparable"
         else:
             verdict = "parity_exact"
 
@@ -485,49 +560,47 @@ def run(path: str, source: str = "", base: int = 0, target: str | int = 0,
             "function": {"name": f.get("name") or "", "addr_hex": "0x%08X" % start,
                          "entry_name": ent_name,
                          "candidate_addr_hex": "0x%08X" % (cand_addr & ~1)},
-            "inputs": {"args": ["0x%08X" % x for x in argv],
-                       "stack": "0x%08X" % int(stack or EM.DEFAULT_STACK),
-                       "ram": "0x%08X" % int(ram or 0x10000)},
+            "inputs": ({"args": ["0x%08X" % x for x in case_argvs[0]],
+                        "stack": "0x%08X" % int(stack or EM.DEFAULT_STACK),
+                        "ram": "0x%08X" % int(ram or 0x10000)} if single else
+                       {"cases": len(cases),
+                        "arg_sets": [c["args"] for c in cases],
+                        "stack": "0x%08X" % int(stack or EM.DEFAULT_STACK),
+                        "ram": "0x%08X" % int(ram or 0x10000)}),
+            "summary": {"cases": len(cases),
+                        "all_exact": verdict == "parity_exact",
+                        "counts": counts},
             "link": {"ro_base": "0x%08X" % ro, "rw_base": "0x%08X" % rw,
                      "symdefs_used": bool(sym_path), "symdefs_note": sym_note,
                      "symdefs_count": sd.get("count") or 0},
-            "reference": {"stop_reason": ref_res["stop_reason"],
-                          "n_insns": ref_res["n_insns"], "return": ref_res["return"],
-                          "n_writes": len(ref_res["writes"])},
-            "target": {"stop_reason": tgt_res["stop_reason"],
-                       "n_insns": tgt_res["n_insns"], "return": tgt_res["return"],
-                       "n_writes": len(tgt_res["writes"])},
-            "same_return": ret_same,
-            "same_scratch": scratch_same,
-            "writes": {"common": len(common), "same_value": len(common) - len(value_mismatch),
-                       "value_mismatch": value_mismatch[:50],
-                       "only_in_reference": _fmt_writes([(k, wa[k]) for k in only_ref])[:50],
-                       "only_in_target": _fmt_writes([(k, wb[k]) for k in only_tgt])[:50]},
-            "differences": {"return_r0": None if ret_same else ret_diff,
-                            "scratch_r1_r3": {k: [ref_res["return"][k],
-                                                  tgt_res["return"][k]]
-                                              for k in ("r1", "r2", "r3")
-                                              if ref_res["return"][k]
-                                              != tgt_res["return"][k]},
-                            "return": ret_diff,
-                            "value_mismatch": value_mismatch[:50],
-                            "stopped": stopped},
-            "not_comparable_because": stopped,
             "source": src_label,
             "image": {"path": os.path.abspath(s), "sha256": orig["sha256"],
                       "container": orig["container"]},
         }
-        out.pop("not_comparable_because")
-        if verdict != "parity_exact":
-            out["not_comparable_because"] = stopped
-        out["scope"] = ("parity 只在**这一组输入**上成立：``parity_exact`` 说明这组参数下"
+        if single:
+            # 单组保持旧形状（reference/target/writes/differences 在顶层），
+            # 老调用方逐字段读不用改。
+            c0 = cases[0]
+            for k in ("reference", "target", "same_return", "same_scratch",
+                      "writes", "differences"):
+                out[k] = c0[k]
+            if "not_comparable_because" in c0:
+                out["not_comparable_because"] = c0["not_comparable_because"]
+        else:
+            out["cases"] = cases
+        out["scope"] = ("parity 只在**跑过的那几组输入**上成立：``parity_exact`` 说明这些"
+                        "参数下"
                         "返回值与共同地址的写逐字节一致，不说明两个函数等价。外设不建模"
                         "（碰到 0x40000000–0x5FFFFFFF 就停，判 not_comparable）；候选的全局"
                         "变量在 --rw-base 上、原函数的在镜像 RAM 里，**同一变量地址不同**，"
                         "所以只在共同地址上比写值，地址不同的写分列两栏。候选默认链到 "
                         "0x20000000（与原镜像同一块 RAM），布局一致时写值才逐字节可比。"
                         "RW 初值不搬：armlink 的初始化值要在启动时由 scatter-load 复制，"
-                        "模拟器不跑启动代码，所以**非零初值的全局变量在两侧都读成 0**。")
+                        "模拟器不跑启动代码，所以**非零初值的全局变量在两侧都读成 0**。"
+                        "多组输入（args_sets）时顶层 verdict 取最硬的一条"
+                        "（differs > return_only > not_comparable > exact），"
+                        "逐组结果在 cases[] 里、分布看 summary.counts——"
+                        "**别把 all_exact 读成「两个函数等价」**，它只说明这几组输入下一致。")
         if own_dir and not keep:
             shutil.rmtree(wd, ignore_errors=True)
         else:

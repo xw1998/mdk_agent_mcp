@@ -408,8 +408,9 @@ def section_f():
           r4.get("ok") is False and r4.get("stage") == "compile"
           and r4.get("error_code") == "compile_failed",
           (r4.get("stage"), r4.get("error_code")))
-    check("F8 scope 里写清『只在这一组输入上成立』与 RW 初值不搬",
-          "这一组输入" in (r.get("scope") or "")
+    # 批次110 把措辞从「这一组输入」收紧成「跑过的那几组输入」（多组输入时更准确）
+    check("F8 scope 里写清『只在跑过的输入上成立』与 RW 初值不搬",
+          "跑过的那几组输入" in (r.get("scope") or "")
           and "RW 初值不搬" in (r.get("scope") or ""), r.get("scope"))
 
 # ---------------------------------------------------------------------------

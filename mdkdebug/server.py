@@ -8641,7 +8641,13 @@ def create_server(host: str = "127.0.0.1", port: int = 4823,
             "已有的机器码；候选 .o 没有绝对地址跑不起来，这一步补的就是链接。\n"
             "**只认 r0 做返回值判词**：r1..r3 在返回那一刻是 caller-saved 残留，随地址布局变，"
             "单独报在 same_scratch / differences.scratch_r1_r3 里，不参与判定。\n"
-            "**限制**：parity 只在这一组输入上成立（同一份代码换参数可以完全一致也可以完全不一致）；"
+            "**多组输入**：args_sets=\"1,2;3,4;0,0\"（分号分隔每组，组内仍是逗号分隔整数）"
+            "一次编链、每组各跑一次（每组都从头跑，不继承上一组的内存）。单组时输出与以前完全一致"
+            "（reference/target/writes 在顶层）；多组时逐组结果在 cases[]，顶层 verdict 取最硬的一条"
+            "（parity_differs > parity_return_only > not_comparable > parity_exact），分布看 "
+            "summary.counts。**一组反例就足以否证等价**，所以 verdict 不会报得比任何一组更宽。"
+            "args 与 args_sets 同时给会直接报错（一个参数一个含义）。\n"
+            "**限制**：parity 只在跑过的那几组输入上成立（同一份代码换参数可以完全一致也可以完全不一致）；"
             "外设不建模（碰到 0x40000000–0x5FFFFFFF 就停下判 not_comparable）；候选默认链到 0x20000000"
             "与原镜像同块 RAM，布局一致时写值才逐字节可比，地址不同的写分列两栏；"
             "RW 初值不搬（不走 scatter-load，非零初值的全局变量两侧都读成 0）。\n"
@@ -8653,7 +8659,8 @@ def create_server(host: str = "127.0.0.1", port: int = 4823,
                                symbol: str = "", code: str = "", entryname: str = "",
                                base: str | int = 0, compiler: str = "auto",
                                cpu: str = "", opt: str = "-O2", includes: str = "",
-                               args: str = "", max_insns: int = 20000,
+                               args: str = "", args_sets: str = "",
+                               max_insns: int = 20000,
                                stack: int = 4096, ram: int = 65536,
                                timeout_us: int = 2000000, ro_base: str | int = 0,
                                rw_base: str | int = 0, work_dir: str = "",
@@ -8665,7 +8672,8 @@ def create_server(host: str = "127.0.0.1", port: int = 4823,
                             entryname=str(entryname or ""),
                             compiler=str(compiler or "auto"), cpu=str(cpu or ""),
                             opt=str(opt or "-O2"), includes=str(includes or ""),
-                            args=str(args or ""), max_insns=int(max_insns or 20000),
+                            args=str(args or ""), args_sets=str(args_sets or ""),
+                            max_insns=int(max_insns or 20000),
                             stack=int(stack or 4096), ram=int(ram or 65536),
                             timeout_us=int(timeout_us or 2000000),
                             ro_base=_pi(ro_base, "ro_base", 0),
