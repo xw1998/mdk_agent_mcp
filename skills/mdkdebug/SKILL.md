@@ -220,6 +220,22 @@ trigger_cancel(id="trg1")                             # 不用了停掉
 - **一定有终点**：`duration_s`（默认 900s）到点 `expired`；同时最多 8 个；进程退出全停。
 - `trigger_wait` **超时不等于条件不成立**，只说明这段时间没等到；要看现场用 `trigger_list`。
 
+**内存条件（`kind="memory"`，批次113）**：`addr` 支持符号名（登记时解析一次）、`op` **必填**、
+`width` 1/2/4/8 小端、`index` 用于数组、`poll_ms` 默认 500 下限 200、同时最多 4 个。
+
+```
+trigger_add(kind="memory", addr="g_state", op="eq", value="3")
+trigger_add(kind="memory", addr="0x20001000", op="change", width=2, index=4)
+```
+
+- **只认高置信样本**：`read_confidence≠high` / 整帧退化 / 两读不一致 → 记 `ambiguous`，
+  **不建基线、不判命中、不覆盖 `last_value`**；连续 20 次转 `error`（`memory-unstable`，
+  这是读不可信，不是条件不成立）。
+- **采样会漏**：`poll_ms` 内的「变过去又变回来」看不到，`sample_gap_ms` 是采样间隔 p95；
+  抓瞬时毛刺用 `set_watchpoint` / trace，不要用内存触发重建事件流。
+- **不做的三件事**：`on_fire`（要写就 `trigger_wait` 后显式 `write_mem` 并看 `verified`）、
+  `running="halt"` 轮询（停-读-走会改变被观察对象；要一致快照先 `stop`）、多地址联合条件。
+
 ### 5. UVSOCK 不可用时的降级通道（命令行批处理）
 
 UVSOCK 被模态框、端口冲突或 Keil 未启动挡住时，用 UV4 的 `-d` 批处理：

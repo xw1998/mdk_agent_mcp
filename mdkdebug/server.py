@@ -1995,6 +1995,10 @@ def _get_client() -> UVClient:
         raise RuntimeError("客户端未初始化，请先调用 create_server()")
     return _client
 
+# 批次113：kind="memory" 的条件触发要读目标内存，而 triggers 不反向依赖 server，
+# 在这里把取客户端的函数注进去（与 builder.set_reset_connection_hook 同一手法）。
+_triggers.set_client_provider(lambda: _get_client())
+
 
 def _parse_addr(s: str | int) -> int:
     """把地址参数解析为整数，支持 0x/0b/0o 前缀或纯十进制。"""
@@ -10682,7 +10686,7 @@ def create_server(host: str = "127.0.0.1", port: int = 4823,
 
     @server.tool(
         name="trigger_add",
-        title="登记条件触发（串口 / Modbus）：后台盯条件，不再反复轮询",
+        title="登记条件触发（串口 / Modbus / 内存）：后台盯条件，不再反复轮询",
         description=(
             "**把「等着看」交给后台线程**：登记一条条件（串口出现某行日志 / 某个 Modbus 寄存器满足比较），"
             "之后去做别的事（编译、烧录、看别的信号），最后调一次 trigger_wait 取结论——不必再自己 "
@@ -10693,10 +10697,20 @@ def create_server(host: str = "127.0.0.1", port: int = 4823,
             "kind=modbus：port/baud/serial_format/slave/func(1/2/3/4 读功能码)/addr/count/index + "
             "op（eq/ne/gt/ge/lt/le/change/mask_set/mask_clear）+ value（整数，支持 0x）或 mask；"
             "每 poll_ms 采一次（默认 200），第一次采样只建立基线（op=change 不会误触发）。\n"
+            "kind=memory：addr（0x 地址 / 十进制 / **符号名**，符号在登记时解析一次，可配 reloc_delta）"
+            "+ op（必填，无默认）+ value 或 mask + width（1/2/4/8 字节，小端，默认 4）+ index（数组下标）；"
+            "每 poll_ms 采一次（默认 500、**下限 200**），同时最多 4 个内存触发。"
+            "**只认高置信样本**：read_confidence≠high / 整帧退化 / 两次读不一致的读数一律记 ambiguous，"
+            "不建基线、不判命中（运行态脏读会整段重复同一个 4 字节字，只看比较就会误命中）；"
+            "连续 20 次 ambiguous 转 error（memory-unstable，这是「读不可信」不是「条件不成立」）。"
+            "**采样会漏**：poll_ms 内「变过去又变回来」看不到——要抓瞬时毛刺用 set_watchpoint 或 trace。"
+            "**只借链路不自停**：running 只接受 live；要一致快照先 stop 目标再登记。memory 不支持 on_fire。\n"
             "on_fire：none（默认）/ serial_send（命中自动回一条）/ modbus_write（命中自动写一个寄存器，"
             "配 write_addr + write_value）。默认命中一次就停；repeat=true 连续盯（配 cooldown_s / max_fires）。"
             "duration_s 默认 900 秒，到点自动 expired，不会在后台无限跑。\n"
             "返回 {id, state=\"waiting\", polls, params...}；参数不全、op 不认识、要读的位置越界一律报错，**不猜**。"
+            "kind=memory 的两条硬口径（全文用 mdk_guide(topic=\"tool\", name=\"trigger_add\")）："
+            "只认高置信样本——ambiguous 不建基线、不判命中；采样会漏，没命中≠没发生过。"
         ),
     )
     async def trigger_add(kind: str = "serial", pattern: str = "", regex: bool = True,
@@ -10706,14 +10720,15 @@ def create_server(host: str = "127.0.0.1", port: int = 4823,
                           port: str = "", baud: int = 9600, databits: int = 8,
                           parity: str = "none", stopbits: float = 1, mode: str = "rtu",
                           serial_format: str = "", slave: int = 1, func: int = 3,
-                          addr: int = 0, count: int = 1, index: int = 0,
-                          op: str = "eq", value: str = "", mask: str = "",
+                          addr: str | int = 0, count: int = 1, index: int = 0,
+                          op: str = "", value: str = "", mask: str = "",
                           signed: bool = False, timeout_ms: int = 1000,
+                          width: int = 4, reloc_delta: str = "",
                           label: str = "", duration_s: float = 900.0,
                           repeat: bool = False, cooldown_s: float = 0.0,
                           max_fires: int = 0, on_fire: str = "none",
                           write_addr: int = -1, write_value: int = -1,
-                          write_func: int = 6) -> str:
+                          write_func: int = 6, running: str = "live") -> str:
         try:
             k = str(kind or "serial").strip().lower()
             val = None if str(value).strip() == "" else value
@@ -10732,25 +10747,53 @@ def create_server(host: str = "127.0.0.1", port: int = 4823,
                 out = _triggers.add_modbus(
                     port=port, baud=baud, databits=databits, parity=parity,
                     stopbits=stopbits, mode=mode, serial_format=serial_format,
-                    slave=slave, func=func, addr=addr, count=count, index=index,
-                    op=op, value=val, mask=msk, signed=signed,
+                    slave=slave, func=func,
+                    addr=(int(addr, 0) if isinstance(addr, str) else int(addr)),
+                    count=count, index=index,
+                    op=(op or "eq"), value=val, mask=msk, signed=signed,
                     poll_ms=(int(poll_ms) if poll_ms else 200),
                     timeout_ms=timeout_ms, label=label, duration_s=duration_s,
                     repeat=repeat, cooldown_s=cooldown_s, max_fires=max_fires,
                     on_fire=on_fire, write_addr=waddr, write_value=wval,
                     write_func=write_func)
+            elif k in ("memory", "mem", "ram", "var", "variable"):
+                # 地址在登记时解析一次：符号名走 .axf/表达式，显式数字地址不受 reloc 偏移
+                try:
+                    client = _get_client()
+                except Exception as e:  # noqa: BLE001
+                    raise _triggers.TriggerError(
+                        "没有可用的调试连接（%s）：内存触发要读目标，先 create_server / 连上 Keil"
+                        % e, code="memory-no-client")
+                delta, dnote = _eff_reloc_delta(reloc_delta)
+                try:
+                    a, note = _resolve_addr_with_reloc(addr, client, delta)
+                except Exception as e:  # noqa: BLE001
+                    raise _triggers.TriggerError(
+                        "地址解析失败（addr=%r）：%s。可以是 0x 地址、十进制，或 .axf 里的符号名"
+                        % (addr, e), code="memory-symbol-unresolved")
+                if note:
+                    note = note if not dnote else "%s（%s）" % (note, dnote)
+                out = _triggers.add_memory(
+                    addr=a, op=op, value=val, mask=msk, width=width, index=index,
+                    signed=signed,
+                    poll_ms=(int(poll_ms) if poll_ms else 500),
+                    label=label, duration_s=duration_s, repeat=repeat,
+                    cooldown_s=cooldown_s, max_fires=max_fires,
+                    addr_arg=(str(addr) if not isinstance(addr, int) else hex(addr)),
+                    addr_note=(note or ""), running=running, on_fire=on_fire)
             else:
                 return _js({"ok": False, "error_code": "invalid-argument",
-                            "error": "kind 只支持 serial / modbus，收到: %s" % kind})
+                            "error": "kind 只支持 serial / modbus / memory，收到: %s" % kind})
             return _js(out)
         except _triggers.TriggerError as e:
-            return _js({"ok": False, "error": str(e), "error_code": "invalid-argument"})
+            return _js({"ok": False, "error": str(e),
+                        "error_code": (getattr(e, "code", "") or "invalid-argument")})
         except Exception as e:  # noqa: BLE001
             return _js({"ok": False, "error": str(e), "error_code": "trigger-failed"})
 
     @server.tool(
         name="trigger_list",
-        title="查看条件触发（全量或单条，纯快照不阻塞）",
+        title="查看条件触发（全量或单条，纯快照不阻塞；内存触发带读置信度与漏采间隔）",
         description=(
             "列出已登记的触发：state（waiting / fired / stopped / expired / error）、polls、errors、"
             "last_value、last_match、remaining_s、命中历史（最近 5 条）。给 id 就只报那一条。"

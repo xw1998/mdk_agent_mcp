@@ -239,7 +239,7 @@ mdk_agent/
 ├── requirements.txt          # Python 依赖
 ├── README.md
 ├── mdkdebug/
-│   ├── __init__.py           # 包初始化（版本号 0.2.36）
+│   ├── __init__.py           # 包初始化（版本号 0.2.37）
 │   ├── cli.py                # 命令行入口（main，mdkdebug 命令）
 │   ├── uvsock.py             # UVSOCK 协议：命令码、VSET/AMEM/EXECCMD 打包与解析
 │   ├── interface.py          # TCP 物理接口层（含异步消息残留清理）
@@ -992,7 +992,7 @@ modbus_session(action="close")                 # 用完把口还回去
 
 | 工具 | 用途 | 主要参数 |
 | --- | --- | --- |
-| `trigger_add` | **登记一个条件触发**（`kind="serial"` / `"modbus"`），后台按 `poll_ms` 盯，命中记进 `fires`。串口触发**只借用** `serial_monitor_start` 已持有的端口（不自开，不抢口）；Modbus 走 `modbus.ensure` **复用会话**（避免 DTR 抖动复位目标板）。`op` 支持 `eq/ne/gt/ge/lt/le/change/mask_set/mask_clear`；`op="change"` 的首次采样**只建基线**、不算命中。`repeat=true` 可多次命中（配 `cooldown_s` / `max_fires`），`on_fire="serial_send"` / `"modbus_write"` 命中后自动回一帧 | `kind`、`pattern?`、`regex?`、`port?`、`slave?`、`func?`、`addr?`、`count?`、`index?`、`op?`、`value?`、`mask?`、`poll_ms?`、`label?`、`duration_s?`、`repeat?`、`max_fires?`、`on_fire?`、`send?`、`write_addr?`、`write_value?` |
+| `trigger_add` | **登记一个条件触发**（`kind="serial"` / `"modbus"` / `"memory"`），后台按 `poll_ms` 盯，命中记进 `fires`。串口触发**只借用** `serial_monitor_start` 已持有的端口（不自开，不抢口）；Modbus 走 `modbus.ensure` **复用会话**（避免 DTR 抖动复位目标板）；内存触发借 `create_server()` 那条 UVSOCK。`op` 支持 `eq/ne/gt/ge/lt/le/change/mask_set/mask_clear`；`op="change"` 的首次采样**只建基线**、不算命中。`repeat=true` 可多次命中（配 `cooldown_s` / `max_fires`），`on_fire="serial_send"` / `"modbus_write"` 命中后自动回一帧（内存触发**不支持** `on_fire`） | `kind`、`pattern?`、`regex?`、`port?`、`slave?`、`func?`、`addr?`、`count?`、`index?`、`op?`、`value?`、`mask?`、`width?`、`signed?`、`reloc_delta?`、`running?`、`poll_ms?`、`label?`、`duration_s?`、`repeat?`、`max_fires?`、`on_fire?`、`send?`、`write_addr?`、`write_value?` |
 | `trigger_list` | **快照**：每个触发的 `state`（`waiting`/`fired`/`stopped`/`expired`/`error`）、`polls`/`errors`、最近命中 `fires`（最多 20 条）、`last_value`/`last_hex`/`last_sample_at`；`with_finished=false` 只看在等的 | `id?`、`with_finished?` |
 | `trigger_wait` | **等**：阻塞到命中 / 终态 / 超时。**只认这次调用之后的新命中**（调用瞬间记下各触发的已有命中数，旧的命中不会让它立刻返回）；超时明确回 `timed_out=true` — **超时不等于条件不成立** | `id?`、`timeout_s?`（默认 30）、`block?` |
 | `trigger_cancel` | **停**：置 `stopped` 并唤醒所有在等它的调用 | `id?`、`reason?` |
@@ -1008,6 +1008,40 @@ trigger_cancel(id="trg1")
 trigger_add(kind="modbus", port="COM9", baud=9600, slave=1,
             func=3, addr=3, count=1, op="gt", value=1000, label="温度过限")
 ```
+
+三条通路（`kind`）各自的前提与代价：
+
+| kind | 前提 | 每次采样做什么 |
+| --- | --- | --- |
+| `serial` | 先 `serial_monitor_start` 持有端口 | 从监听缓冲里扫新行（不碰端口） |
+| `modbus` | 给 `port`（复用/打开会话） | 发一帧读请求、收一帧应答 |
+| `memory` | 已连上 Keil（`create_server`） | 一次 `read_mem`（运行态会多复读一轮） |
+
+### 内存条件（`kind="memory"`，批次113）
+
+`addr` 可以是 `0x…`、十进制或**符号名**（`.axf` 符号表，登记时解析一次，可配 `reloc_delta`）；
+`op` **必填**（不给默认值，免得「我只想看现在是多少」被静默变成跳变订阅）；`width` 1/2/4/8
+（小端），`index` 用于数组（实际地址 = `addr + index*width`）。`poll_ms` 默认 500、**下限 200**，
+同时最多 4 个内存触发。
+
+```text
+trigger_add(kind="memory", addr="g_state", op="eq", value="3", label="状态机跑到 3")
+trigger_add(kind="memory", addr="0x20001000", op="change", width=2, index=4)
+```
+
+**只认高置信样本**：`read_confidence != "high"`、整帧退化（全 0x00 / 全 0xFF / 整段重复同一个
+4 字节字）、两次读不一致的读数，一律记作 `ambiguous` —— **不建基线、不判命中、不覆盖
+`last_value`**。原因是真机实测过的静默错答案：目标全速运行时经 SWD 读 SRAM 会整段重复同一个
+4 字节字（如 `0x01010101`），只看比较就会误命中。连续 20 次 `ambiguous` 转 `error`
+（`memory-unstable`，这是**读不可信**，不是条件不成立）。
+
+**采样会漏**：`poll_ms` 之内的「变过去又变回来」看不到——`trigger_list` 给 `sample_gap_ms`
+（采样间隔 p95）让你知道分辨率。要抓瞬时毛刺用 `set_watchpoint`（数据观察点）或 trace，
+不要用内存触发去「重建事件流」。
+
+**内存触发不做三件事**（写死）：`on_fire` 不支持（要写就 `trigger_wait` 等到后显式
+`write_mem` 并看 `verified`）；`running="halt"` 不支持（轮询式停-读-走会改变被观察对象，
+要一致快照先 `stop` 目标再登记）；不做多地址联合条件（不是原子快照）。
 
 四条口径：
 - **只认新事件**：`trigger_wait` 把「登记之前的命中」和「这次等到的」分开，`repeat` 触发不会被
@@ -1850,6 +1884,16 @@ uVision 再打开就报错。批次97 把这条纪律做成**工具能执行的�
 > **不合并的**：`uvprojx_read` / `uvprojx_edit` / `project_file_check` / `project_file_repair`
 > （读、写、体检、修复四件事，风险与返回形态都不同）、`recover_bindiff` 的两种模式之外的同构
 > 工具（后端不同，前端壳相同但底座是两套实现）、以及连接器层——那一层只有一个服务，不是重复实现。
+
+> **批次113（0.2.37）：条件触发扩到内存（`kind="memory"`）——不新增工具，只多一个 kind**。
+> 入口仍是 `trigger_add`，所以注册数仍 **231**、默认暴露仍 **42**、`serial` 组仍 19。
+> 四条新增口径：① **只认高置信样本**（`read_confidence≠high` / 整帧退化 / 两读不一致 → 记
+> `ambiguous`，不建基线、不判命中、不覆盖 `last_value`；连续 20 次转 `memory-unstable`；
+> 防的是运行态经 SWD 读 SRAM 整段重复同一个 4 字节字的伪值）；② **`op` 必填**（不给默认
+> `change`）；③ **`poll_ms` 下限 200、默认 500、同时最多 4 个**（每次采样是真实链路往返）；
+> ④ **采样会漏**（`sample_gap_ms` 给出分辨率，「没命中」≠「没发生过」）。不做的三件事：
+> `on_fire`（要写就显式 `write_mem`）、`running="halt"` 轮询（停-读-走会改变被观察对象）、
+> 多地址联合条件（不是原子快照）。预注册与判据见 `docs/trigger-memory-prereg.md`。
 
 > **批次112（0.2.36）：条件触发（串口 / Modbus）——登记后后台盯，不必反复轮询**。工具面新增
 > 四个（227 → 231）：`trigger_add` / `trigger_list` / `trigger_wait` / `trigger_cancel`，全在

@@ -47,12 +47,28 @@ DEFAULT_DURATION_S = 900.0
 MIN_POLL_MS = 20
 DEFAULT_SERIAL_POLL_MS = 50
 DEFAULT_MODBUS_POLL_MS = 200
+# 批次113：内存通路。UVSOCK 每次读是真实链路往返（运行态还要多复读一轮），
+# 比串口行匹配贵一个数量级，所以下限单独抬高、并发数单独限死。
+MIN_MEM_POLL_MS = 200
+DEFAULT_MEM_POLL_MS = 500
+MAX_MEM_TRIGGERS = 4
+MEM_WIDTHS = (1, 2, 4, 8)
+MEM_MAX_CONSECUTIVE_AMBIGUOUS = 20
 OPS = ("eq", "ne", "gt", "ge", "lt", "le", "change", "mask_set", "mask_clear")
 ON_FIRE = ("none", "serial_send", "modbus_write")
 
 
 class TriggerError(ValueError):
-    """参数/状态问题：调用方要把它当成「这次没登记成」而不是「等到了」."""
+    """参数/状态问题：调用方要把它当成「这次没登记成」而不是「等到了」。
+
+    ``code`` 是可选的错误码（批次113）：内存通路的七类参数/前提问题要各自可辨，
+    而串口/Modbus 既有的 ``raise TriggerError(...)`` 不带码、由工具层统一落到
+    ``invalid-argument``，行为与批次112 完全一致。
+    """
+
+    def __init__(self, msg, code: str = ""):
+        super().__init__(msg)
+        self.code = str(code or "")
 
 
 # ----------------------------------------------------------------------
@@ -111,6 +127,14 @@ class Trigger:
         self.last_sample_at = 0.0
         self.error_code = ""
         self.hint = ""
+        # 批次113（kind=memory）：只有高置信样本才算样本，其余记 ambiguous。
+        self.ambiguous = 0
+        self.ambiguous_consecutive = 0
+        self.last_ambiguous_hex = ""
+        self.last_confidence = ""
+        self.last_while_running = None
+        self.baseline_ready = False
+        self.sample_ts = []
         self.cursor = None
         self.prev_value = None
         self.event = threading.Event()
@@ -181,6 +205,7 @@ class Trigger:
                 "errors": self.errors,
                 "consecutive_errors": self.consecutive_errors,
                 "last_error": self.last_error,
+                "error_code": self.error_code,
                 "last_error_code": self.last_error_code,
                 "last_match": self.last_match,
                 "last_value": self.last_value,
@@ -192,6 +217,8 @@ class Trigger:
             }
             if getattr(self, "hint", ""):
                 out["hint"] = self.hint
+            if self.kind == "memory":
+                out.update(_mem_view(self))
             if with_history:
                 out["hits"] = list(self.fires[-5:])
                 out["hits_truncated"] = len(self.fires) > 5
@@ -577,6 +604,298 @@ def _modbus_loop(tr: Trigger):
         tr.stop_ev.wait(poll)
     if tr.state == "waiting":
         tr.stop("expired", "到 duration_s 仍未满足条件（这段时间内条件没有成立）")
+
+
+# ----------------------------------------------------------------------
+# 内存触发（批次113）
+# ----------------------------------------------------------------------
+# 不反向依赖 server：由 create_server() 注入取客户端的函数
+# （与 builder.set_reset_connection_hook 同一套手法）。
+_CLIENT_PROVIDER = [None]
+
+
+def set_client_provider(fn) -> None:
+    _CLIENT_PROVIDER[0] = fn
+
+
+def _client_or_raise():
+    fn = _CLIENT_PROVIDER[0]
+    if fn is None:
+        raise TriggerError("调试客户端未初始化：memory 触发需要一条已建好的 UVSOCK 连接",
+                           code="memory-no-client")
+    try:
+        return fn()
+    except TriggerError:
+        raise
+    except Exception as e:  # noqa: BLE001
+        raise TriggerError("取调试客户端失败：%s" % e, code="memory-no-client")
+
+
+def _mem_count() -> int:
+    with _LOCK:
+        return sum(1 for t in _TRIGGERS.values()
+                   if t.kind == "memory" and t.state in ("waiting", "fired"))
+
+
+def _mem_view(tr: Trigger) -> dict:
+    """内存通路专有的现场（只在高置信样本上更新 last_value）。"""
+    gaps = []
+    ts = list(tr.sample_ts)
+    for a, b in zip(ts, ts[1:]):
+        gaps.append((b - a) * 1000.0)
+    total = tr.polls + tr.ambiguous
+    return {
+        "read_confidence": tr.last_confidence,
+        "while_running": tr.last_while_running,
+        "ambiguous_count": tr.ambiguous,
+        "ambiguous_rate": (round(tr.ambiguous / total, 4) if total else 0.0),
+        "last_ambiguous_hex": tr.last_ambiguous_hex,
+        "baseline_ready": tr.baseline_ready,
+        "sample_gap_ms": (round(sorted(gaps)[int(len(gaps) * 0.95) - 1 if len(gaps) > 1 else 0], 1)
+                          if gaps else None),
+        "sampled": tr.polls,
+    }
+
+
+def _decode(raw: bytes, width: int, signed: bool):
+    if len(raw) != width:
+        return None
+    return int.from_bytes(raw, "little", signed=bool(signed))
+
+
+def add_memory(addr: int, op: str, value=None, mask=None, width: int = 4,
+               index: int = 0, signed: bool = False, poll_ms: int = DEFAULT_MEM_POLL_MS,
+               label: str = "", duration_s: float = DEFAULT_DURATION_S,
+               repeat: bool = False, cooldown_s: float = 0.0, max_fires: int = 0,
+               max_consecutive_errors: int = 20,
+               addr_arg: str = "", addr_note: str = "",
+               on_fire: str = "none", running: str = "live") -> dict:
+    """登记一条内存条件（采样型：只看目标此刻的值）。
+
+    与串口/Modbus 的两条差别（预注册 docs/trigger-memory-prereg.md）：
+    1. **只认高置信样本**：read_confidence 非 high、或整帧退化、或复读不一致的读数一律记
+       ``ambiguous``——不建基线、不算命中、不覆盖 ``last_value``（脏读会伪装成命中）；
+    2. **链路只借不抢**：借 create_server() 那条 UVSOCK（UVClient 自带锁），没连上就报错。
+    """
+    of = _norm_on_fire(on_fire)
+    if of != "none":
+        raise TriggerError(
+            "memory 触发不支持 on_fire=%s：命中后自动写内存会静默失败（写下去可能被 CPU 立即覆盖，"
+            "连 write_mem 自己都要靠回读 verified 才敢说落地）。改成 on_fire=none，"
+            "等 trigger_wait 命中后显式调 write_mem（记得看 verified）" % of,
+            code="memory-on-fire-unsupported")
+    run_mode = str(running or "live").strip().lower()
+    if run_mode != "live":
+        raise TriggerError(
+            "memory 触发只支持 running=\"live\"，收到 %r：轮询式「停-读-走」会**改变被观察对象**"
+            "（每次暂停 paused_ms 累积，超时/看门狗/握手这类条件会被自己的观测改掉）。"
+            "要某一瞬间的一致快照：先 stop 目标再登记，或单次 read_mem(running=\"halt\")"
+            % running, code="memory-halt-not-supported")
+    op_n = str(op or "").strip().lower()
+    if not op_n:
+        raise TriggerError(
+            "memory 触发必须显式给 op（eq/ne/gt/ge/lt/le/change/mask_set/mask_clear）："
+            "不给默认值是有意的——默认 change 会把「我只想看现在是多少」静默变成跳变订阅",
+            code="memory-op-required")
+    op_n = _norm_op(op_n)
+    w = int(width if width is not None else 4)
+    if w not in MEM_WIDTHS:
+        raise TriggerError("width 只支持 %s（字节），收到: %r"
+                           % (" / ".join(str(x) for x in MEM_WIDTHS), width),
+                           code="memory-bad-width")
+    ix = int(index or 0)
+    if ix < 0:
+        raise TriggerError("index 不能为负（收到 %d）" % ix, code="memory-bad-index")
+    try:
+        pm = int(poll_ms if poll_ms is not None else DEFAULT_MEM_POLL_MS)
+    except (TypeError, ValueError):
+        raise TriggerError("poll_ms 必须是毫秒整数，收到: %r" % (poll_ms,),
+                           code="memory-bad-poll")
+    if pm < MIN_MEM_POLL_MS:
+        raise TriggerError(
+            "memory 通路的 poll_ms 下限是 %dms（收到 %d）：每次采样是一次真实 UVSOCK 往返，"
+            "目标运行态还会多复读一轮。要更细的分辨率请用 set_watchpoint（数据观察点）或 trace"
+            % (MIN_MEM_POLL_MS, pm), code="memory-poll-too-fast")
+    bits = 8 * w
+    if mask is not None:
+        try:
+            mask = int(mask)
+        except (TypeError, ValueError):
+            raise TriggerError("mask 必须是整数（十进制或 0x），收到: %r" % (mask,),
+                               code="memory-bad-mask")
+        if mask < 0 or mask >= (1 << bits):
+            raise TriggerError("mask=0x%X 超出 width=%d 的取值范围（0..0x%X）"
+                               % (mask, w, (1 << bits) - 1), code="memory-bad-mask")
+    if value is not None:
+        try:
+            value = int(value)
+        except (TypeError, ValueError):
+            raise TriggerError("value 必须是整数（十进制或 0x），收到: %r" % (value,),
+                               code="memory-bad-value")
+        lo = -(1 << (bits - 1)) if signed else 0
+        hi = (1 << (bits - (1 if signed else 0))) - 1
+        if not (lo <= value <= hi):
+            raise TriggerError(
+                "value=%d 超出 width=%d signed=%s 的取值范围 %d..%d（不截断、不猜）"
+                % (value, w, bool(signed), lo, hi), code="memory-value-out-of-range")
+    if op_n in ("mask_set", "mask_clear") and mask is None:
+        raise TriggerError("op=%s 时必须给 mask（如 mask=\"0x0100\"）" % op_n,
+                           code="memory-bad-mask")
+    if op_n not in ("change", "mask_set", "mask_clear") and value is None:
+        raise TriggerError("op=%s 时必须给 value（要和什么比）" % op_n,
+                           code="memory-bad-value")
+    if _mem_count() >= MAX_MEM_TRIGGERS:
+        raise TriggerError(
+            "同时在跑的内存触发已有 %d 个（上限 %d）：内存采样要走真实调试链路，"
+            "再多会把链路拖慢。先 trigger_cancel 掉不用的，或改成在 AI 这边少等一会儿"
+            % (MAX_MEM_TRIGGERS, MAX_MEM_TRIGGERS), code="memory-too-many")
+    a = int(addr)
+    # 登记时先确认链路在（不挂空等），并解析符号（解析只做一次）
+    client = _client_or_raise()
+    if not hasattr(client, "read_mem_verified"):
+        raise TriggerError("当前客户端不支持 read_mem_verified，无法做内存条件触发",
+                           code="memory-no-client")
+    params = {
+        "addr": a, "addr_expr": (str(addr_arg) if str(addr_arg or "") else hex(a)),
+        "addr_note": str(addr_note or ""), "width": w, "index": ix,
+        "op": op_n, "value": value, "mask": mask, "signed": bool(signed),
+        "poll_ms": pm,
+        "repeat": bool(repeat), "cooldown_s": max(0.0, float(cooldown_s or 0)),
+        "max_fires": int(max_fires or (MAX_FIRES if repeat else 1)),
+        "on_fire": "none",
+        "max_consecutive_errors": max(1, int(max_consecutive_errors or 20)),
+    }
+    tr = Trigger(_next_id(), "memory", str(label or ""), params)
+    _register(tr)
+    tr.start(_memory_loop, duration_s)
+    out = tr.snapshot(with_history=False)
+    out["note"] = ("已登记并在后台采样（每 %dms 一次）。只认高置信样本："
+                   "read_confidence≠high / 整帧退化 / 复读不一致的读数记作 ambiguous，"
+                   "不建基线也不判命中。采样会漏——poll_ms 内「变过去又变回来」看不到"
+                   % pm)
+    return out
+
+
+def _memory_loop(tr: Trigger):
+    p = tr.params
+    poll = p["poll_ms"] / 1000.0
+    max_err = p["max_consecutive_errors"]
+    width = p["width"]
+    base_addr = p["addr"] + p["index"] * width
+    while not tr.stop_ev.is_set() and time.time() < tr.deadline:
+        try:
+            client = _client_or_raise()
+            r = client.read_mem_verified(base_addr, width)
+        except Exception as e:  # noqa: BLE001
+            tr.errors += 1
+            tr.consecutive_errors += 1
+            tr.last_error = "读内存失败：%s" % e
+            tr.last_error_code = "memory-read-failed"
+            tr.last_sample_at = time.time()
+            if tr.consecutive_errors >= max_err:
+                tr.set_error("memory-read-failed", tr.last_error,
+                             "确认 Keil 还连着（keil_health）；链接被编译/烧录打断后用 "
+                             "restart_keil 或重新 create_server")
+                return
+            tr.stop_ev.wait(poll)
+            continue
+        tr.polls += 1
+        tr.last_sample_at = time.time()
+        if not r.get("ok"):
+            tr.errors += 1
+            tr.consecutive_errors += 1
+            tr.last_error = "读内存没成功：%s" % (r.get("status_text") or r.get("error") or "未知原因")
+            tr.last_error_code = "memory-read-failed"
+            if tr.consecutive_errors >= max_err:
+                tr.set_error("memory-read-failed", tr.last_error,
+                             "地址是否越界（query_memory_map）？目标是否还在调试态？")
+                return
+            tr.stop_ev.wait(poll)
+            continue
+        conf = str(r.get("read_confidence") or "")
+        deg = str(r.get("degenerate") or "")
+        cons = r.get("reread_consistent")
+        tr.last_confidence = conf
+        tr.last_while_running = r.get("while_running")
+        # 【核心】只有「高置信 + 无退化 + 未判不一致」才算一个样本。
+        if conf != "high" or deg or cons is False:
+            tr.ambiguous += 1
+            tr.ambiguous_consecutive += 1
+            tr.last_ambiguous_hex = (r.get("first_read_hex") or r.get("data_hex") or "")
+            tr.last_error = ("本次读数不可信（read_confidence=%s%s%s）：不参与判定"
+                            % (conf or "?", ("，degenerate=%s" % deg) if deg else "",
+                               "，两读不一致" if cons is False else ""))
+            tr.last_error_code = "memory-ambiguous"
+            tr.sample_ts.append(time.time())
+            if len(tr.sample_ts) > 200:
+                tr.sample_ts = tr.sample_ts[-200:]
+            if tr.ambiguous_consecutive >= MEM_MAX_CONSECUTIVE_AMBIGUOUS:
+                tr.set_error(
+                    "memory-unstable",
+                    "连续 %d 次采样都不是高置信读数（最近一次 read_confidence=%s"
+                    "%s）：这不是「条件不成立」，是**读不可信**"
+                    % (tr.ambiguous_consecutive, conf or "?",
+                       ("，degenerate=%s" % deg) if deg else ""),
+                    "先 get_status 确认目标状态；运行态抖动大就 stop 目标再登记，"
+                    "或单次 read_mem 看 read_confidence（M7 可问 cache_info / dcache_maintain）")
+                return
+            tr.stop_ev.wait(poll)
+            continue
+        tr.consecutive_errors = 0
+        tr.ambiguous_consecutive = 0
+        raw = bytes.fromhex(r.get("data_hex") or "")
+        cur = _decode(raw, width, p["signed"])
+        if cur is None:
+            tr.errors += 1
+            tr.consecutive_errors += 1
+            tr.last_error = "读数长度不符（要 %d 字节，拿到 %d 字节）" % (width, len(raw))
+            tr.last_error_code = "memory-bad-width"
+            if tr.consecutive_errors >= max_err:
+                tr.set_error("memory-bad-width", tr.last_error)
+                return
+            tr.stop_ev.wait(poll)
+            continue
+        tr.last_value = cur
+        tr.last_hex = ("0x%0*X" % (width * 2, cur)) if cur >= 0 else ("-0x%0*X" % (width * 2, -cur))
+        tr.sample_ts.append(time.time())
+        if len(tr.sample_ts) > 200:
+            tr.sample_ts = tr.sample_ts[-200:]
+        try:
+            hit_now = compare(p["op"], cur, tr.prev_value, p["value"], p["mask"])
+        except TriggerError as e:
+            tr.set_error("trigger-bad-condition", str(e))
+            return
+        prev = tr.prev_value
+        if p["op"] == "change" and not tr.baseline_ready:
+            # 首个高置信样本只建基线：否则「登记的一瞬间」会被当成一次变化
+            tr.prev_value = cur
+            tr.baseline_ready = True
+            tr.stop_ev.wait(poll)
+            continue
+        tr.baseline_ready = True
+        tr.prev_value = cur
+        if hit_now:
+            hit = {"value": cur, "value_hex": tr.last_hex, "prev_value": prev,
+                   "addr": hex(base_addr), "width": width,
+                   "read_confidence": conf, "while_running": r.get("while_running"),
+                   "raw_hex": raw.hex(),
+                   "sample_gap_ms": _mem_view(tr).get("sample_gap_ms"),
+                   "cooldown_s": p["cooldown_s"], "max_fires": p["max_fires"],
+                   "t": round(time.time(), 3),
+                   "condition": "%s %s" % (p["op"], p["value"] if p["value"] is not None
+                                           else ("mask=%s" % p["mask"]))}
+            tr.fire(hit)
+            if tr.state != "fired" and len(tr.fires) < p["max_fires"]:
+                if p["cooldown_s"] > 0:
+                    tr.stop_ev.wait(p["cooldown_s"])
+                continue
+            tr.stop("fired")
+            return
+        tr.stop_ev.wait(poll)
+    if tr.state == "waiting":
+        tr.stop("expired",
+                "到 duration_s 仍未满足条件（这段时间内没有采样到满足条件的高置信读数；"
+                "采样会漏，不等于从未发生过）")
 
 
 # ----------------------------------------------------------------------

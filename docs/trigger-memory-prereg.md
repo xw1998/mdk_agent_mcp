@@ -173,7 +173,17 @@ memory 通路借的是 `create_server()` 建的那条 UVSOCK 连接（`UVClient`
    （仍是 231 / 42），**但 `serial` 组描述体积会涨**，需确认 `lean` 档下 `trigger_add` 的
    关键句仍在（放描述末尾）。
 
-## 10. 等确认的两处口径（写在这里，实施前由用户裁定）
+## 10. 两处口径：已裁定（2026-11-16，实施前）
+
+- **A. `poll_ms` 下限 200 ms + `MAX_MEM_TRIGGERS = 4`** → 用户裁定 **接受**（推荐项）。
+  理由成立：UVSOCK 每次读是真实链路往返，运行态还要多复读一轮；4 个触发 @500 ms 实测读率
+  约 24 次/秒，仍在安全区。
+- **B. `op` 必填（不给默认 `change`）** → 用户裁定 **坚持必填**。
+
+两种裁定都落在实现里：`MIN_MEM_POLL_MS=200` / `MAX_MEM_TRIGGERS=4` / `DEFAULT_MEM_POLL_MS=500`，
+`add_memory()` 在 `op` 为空时抛 `memory-op-required`。
+
+### 原始待裁定清单（保留原文，供追溯）
 
 - **A. `poll_ms` 下限 200 ms + `MAX_MEM_TRIGGERS=4`**：是否接受？理由是 UVSOCK 每次读是
   真实链路往返（运行态还会复读一轮），比串口行匹配贵一个数量级。
