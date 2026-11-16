@@ -58,6 +58,7 @@ from . import thin as _thin
 from . import surface as _surface
 from . import traceproto as _traceproto
 from . import modbus as _modbus
+from . import triggers as _triggers
 from . import resetwatch as _resetwatch
 from . import coverage as _coverage
 from . import scatter as _scatter
@@ -10680,6 +10681,133 @@ def create_server(host: str = "127.0.0.1", port: int = 4823,
             return _js({"ok": False, "error": str(e)})
 
     @server.tool(
+        name="trigger_add",
+        title="登记条件触发（串口 / Modbus）：后台盯条件，不再反复轮询",
+        description=(
+            "**把「等着看」交给后台线程**：登记一条条件（串口出现某行日志 / 某个 Modbus 寄存器满足比较），"
+            "之后去做别的事（编译、烧录、看别的信号），最后调一次 trigger_wait 取结论——不必再自己 "
+            "serial_read / modbus_read 反复轮询。\n"
+            "kind=serial：pattern（默认正则，regex=false 按字面）、case_sensitive、include_partial（半行也算，"
+            "rt_kprintf 常不带换行）；**依赖 serialmon 已持有端口**（先 serial_monitor_start）。"
+            "可选 send / hex / eol：登记的同时把命令发出去（只发不等，回显交给条件）。\n"
+            "kind=modbus：port/baud/serial_format/slave/func(1/2/3/4 读功能码)/addr/count/index + "
+            "op（eq/ne/gt/ge/lt/le/change/mask_set/mask_clear）+ value（整数，支持 0x）或 mask；"
+            "每 poll_ms 采一次（默认 200），第一次采样只建立基线（op=change 不会误触发）。\n"
+            "on_fire：none（默认）/ serial_send（命中自动回一条）/ modbus_write（命中自动写一个寄存器，"
+            "配 write_addr + write_value）。默认命中一次就停；repeat=true 连续盯（配 cooldown_s / max_fires）。"
+            "duration_s 默认 900 秒，到点自动 expired，不会在后台无限跑。\n"
+            "返回 {id, state=\"waiting\", polls, params...}；参数不全、op 不认识、要读的位置越界一律报错，**不猜**。"
+        ),
+    )
+    async def trigger_add(kind: str = "serial", pattern: str = "", regex: bool = True,
+                          case_sensitive: bool = True, include_partial: bool = True,
+                          poll_ms: int = 0, send: str = "", hex: str = "", eol: str = "crlf",
+                          encoding: str = "utf-8",
+                          port: str = "", baud: int = 9600, databits: int = 8,
+                          parity: str = "none", stopbits: float = 1, mode: str = "rtu",
+                          serial_format: str = "", slave: int = 1, func: int = 3,
+                          addr: int = 0, count: int = 1, index: int = 0,
+                          op: str = "eq", value: str = "", mask: str = "",
+                          signed: bool = False, timeout_ms: int = 1000,
+                          label: str = "", duration_s: float = 900.0,
+                          repeat: bool = False, cooldown_s: float = 0.0,
+                          max_fires: int = 0, on_fire: str = "none",
+                          write_addr: int = -1, write_value: int = -1,
+                          write_func: int = 6) -> str:
+        try:
+            k = str(kind or "serial").strip().lower()
+            val = None if str(value).strip() == "" else value
+            msk = None if str(mask).strip() == "" else mask
+            waddr = None if int(write_addr) < 0 else int(write_addr)
+            wval = None if int(write_value) < 0 else int(write_value)
+            if k in ("serial", "uart", "com", "line", "log"):
+                out = _triggers.add_serial(
+                    pattern=pattern, regex=regex, case_sensitive=case_sensitive,
+                    include_partial=include_partial,
+                    poll_ms=(int(poll_ms) if poll_ms else 50),
+                    send=send, hex=hex, eol=eol, encoding=encoding, label=label,
+                    duration_s=duration_s, repeat=repeat, cooldown_s=cooldown_s,
+                    max_fires=max_fires, on_fire=on_fire)
+            elif k in ("modbus", "modbus_rtu", "mb", "register", "reg"):
+                out = _triggers.add_modbus(
+                    port=port, baud=baud, databits=databits, parity=parity,
+                    stopbits=stopbits, mode=mode, serial_format=serial_format,
+                    slave=slave, func=func, addr=addr, count=count, index=index,
+                    op=op, value=val, mask=msk, signed=signed,
+                    poll_ms=(int(poll_ms) if poll_ms else 200),
+                    timeout_ms=timeout_ms, label=label, duration_s=duration_s,
+                    repeat=repeat, cooldown_s=cooldown_s, max_fires=max_fires,
+                    on_fire=on_fire, write_addr=waddr, write_value=wval,
+                    write_func=write_func)
+            else:
+                return _js({"ok": False, "error_code": "invalid-argument",
+                            "error": "kind 只支持 serial / modbus，收到: %s" % kind})
+            return _js(out)
+        except _triggers.TriggerError as e:
+            return _js({"ok": False, "error": str(e), "error_code": "invalid-argument"})
+        except Exception as e:  # noqa: BLE001
+            return _js({"ok": False, "error": str(e), "error_code": "trigger-failed"})
+
+    @server.tool(
+        name="trigger_list",
+        title="查看条件触发（全量或单条，纯快照不阻塞）",
+        description=(
+            "列出已登记的触发：state（waiting / fired / stopped / expired / error）、polls、errors、"
+            "last_value、last_match、remaining_s、命中历史（最近 5 条）。给 id 就只报那一条。"
+            "**这是快照，不会等**；要等命中用 trigger_wait。"
+            "state=error 时 error_code/last_error/hint 说明为什么停了（例如串口监听被停掉）。"
+        ),
+    )
+    async def trigger_list(id: str = "", with_finished: bool = True) -> str:
+        try:
+            if str(id or "").strip():
+                return _js(_triggers.status(id))
+            return _js(_triggers.list_all(with_finished=bool(with_finished)))
+        except _triggers.TriggerError as e:
+            return _js({"ok": False, "error": str(e), "error_code": "trigger-not-found"})
+        except Exception as e:  # noqa: BLE001
+            return _js({"ok": False, "error": str(e), "error_code": "trigger-failed"})
+
+    @server.tool(
+        name="trigger_wait",
+        title="等待条件触发命中（可设超时；timeout_s=0 立即取快照）",
+        description=(
+            "等某个触发命中；id 为空表示「任意一个先命中」。timeout_s 默认 30 秒，"
+            "block=false 或 timeout_s=0 只取当前快照、完全不阻塞（AI 可以先干别的再回来问一句）。\n"
+            "返回 fired / state / polls / last_value / last_match / hits / waited_ms；"
+            "超时返回 fired=false、timeout=true——**超时不等于条件不成立**，只说明这段时间里没等到，"
+            "现场（polls、last_value、last_error）一并给出。"
+            "触发已经以 error/expired 结束时会直接返回 ended，不会白等到超时。"
+        ),
+    )
+    async def trigger_wait(id: str = "", timeout_s: float = 30.0,
+                          block: bool = True) -> str:
+        try:
+            return _js(_triggers.wait(id, timeout_s=timeout_s, block=block))
+        except _triggers.TriggerError as e:
+            return _js({"ok": False, "error": str(e), "error_code": "trigger-not-found"})
+        except Exception as e:  # noqa: BLE001
+            return _js({"ok": False, "error": str(e), "error_code": "trigger-failed"})
+
+    @server.tool(
+        name="trigger_cancel",
+        title="取消条件触发（单条或全部）",
+        description=(
+            "取消触发并停掉后台线程：给 id 只取消那一条，不给则取消全部。"
+            "取消后命中记录随之消失——要留证据先用 trigger_list(id) 或 trigger_wait 取回。"
+            "到 duration_s 自动 expired 的触发仍然占着一个名额，用 trigger_cancel 或 "
+            "trigger_list(with_finished=false) 之后按需清理。"
+        ),
+    )
+    async def trigger_cancel(id: str = "", reason: str = "调用方取消") -> str:
+        try:
+            return _js(_triggers.cancel(id, reason=reason))
+        except _triggers.TriggerError as e:
+            return _js({"ok": False, "error": str(e), "error_code": "trigger-not-found"})
+        except Exception as e:  # noqa: BLE001
+            return _js({"ok": False, "error": str(e), "error_code": "trigger-failed"})
+
+    @server.tool(
         name="mdk_guide",
         title="环境自检与调试工作流引导",
         description=(
@@ -10740,6 +10868,8 @@ def create_server(host: str = "127.0.0.1", port: int = 4823,
                 "（串口用完就还：exit_debug/烧录/关 Keil 都会自动释放端口，释放后已收日志仍可 serial_read）",
                 "10. 要下发命令/数据（shell、bootloader、镜像片段）：serial_write(text=\"help\")"
                 "（收与发共用同一句柄，写后自动把新增回显带回来）",
+                "11. 等某行日志/某寄存器满足条件（不想一直轮询）：trigger_add 登记 → 去干别的"
+                " → trigger_wait 一次等到（block=false 只取快照），不用了 trigger_cancel",
             ]
             scene_tools = {
                 "看程序停在哪": "get_current_location / snapshot",
@@ -10752,6 +10882,7 @@ def create_server(host: str = "127.0.0.1", port: int = 4823,
                 "抓宿主机串口日志(rt_kprintf/ULOG)": "serial_monitor_start / serial_read / serial_monitor_stop",
                 "串口下发命令/数据(一边收一边发)": "serial_monitor_start（持有端口）→ serial_write → serial_read",
                 "串口被占用/打不开(WinError=5)": "serial_monitor_stop（释放端口，日志保留）→ 或等空闲自动释放（idle_release_s）",
+                "等目标打出某行日志/等寄存器到条件（不想轮询）": "trigger_add / trigger_wait / trigger_list / trigger_cancel",
                 "改代码重新上板": "build_and_flash / flash_debug",
             }
             return _js({"ok": True, "environment": env,

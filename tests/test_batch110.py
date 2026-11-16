@@ -4,7 +4,7 @@
 批次108 的 parity 只跑一组输入，结论押在一个采样点上；本批让一次调用跑多组。
 分节：
 
-  A 工具面：注册仍 227、schema 有 args_sets、别名表登记且不遮蔽
+  A 工具面：注册仍 231、schema 有 args_sets、别名表登记且不遮蔽
   B 参数校验：args 与 args_sets 同时给报错、非法 args_sets 报错带参数名
   C 端到端（要工具链 + unicorn）：全一致 → parity_exact + all_exact；
     一组反例 → 聚合 parity_differs（另一组仍 exact）；逐组细节在 cases[]；
@@ -119,7 +119,7 @@ def section_a():
 
     tools = {t.name: t for t in asyncio.run(_list())}
     names = sorted(tools)
-    check("A1 注册总数仍是 227（本批只加参数，不加工具）", len(names) == 227,
+    check("A1 注册总数仍是 231（本批只加参数，不加工具）", len(names) == 231,
           len(names))
     check("A2 recover_c_parity 仍在", "recover_c_parity" in tools)
     t = tools.get("recover_c_parity")

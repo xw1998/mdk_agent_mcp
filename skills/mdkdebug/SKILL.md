@@ -5,7 +5,7 @@ description: 用 mdkdebug MCP 驱动 Keil uVision 做在线调试——读变量
 
 # mdkdebug —— Keil 在线调试的组合拳
 
-mdkdebug 是一个把 Keil uVision 变成「可被 AI 调用」的 MCP 服务，共 227 个工具。
+mdkdebug 是一个把 Keil uVision 变成「可被 AI 调用」的 MCP 服务，共 231 个工具。
 本技能告诉你**先调什么、按什么顺序调、遇到问题找谁**，避免在近百个工具里瞎试。
 
 ## 零、怎么把它起来（含宿主环境隔离）
@@ -195,6 +195,30 @@ modbus_session(action="close")                     # 用完还口
   请求与应答**同形**的功能码如实标 `ambiguous`，不硬指一个方向。
 - Modbus 会话会**独占** COM 口（空闲 900s 自动释放）；要接着看日志或开串口助手，先
   `modbus_session(action="close")`，否则会 `WinError=5`。
+
+### 4.5 不想一直等：登记条件触发（`trigger_*`，批次112）
+
+等一行日志、等一个寄存器到阈值——**别轮询，登记给后台**：
+
+```
+trigger_add(kind="serial", pattern="READY")            # 登记即返回（借 serial_monitor 的端口）
+trigger_add(kind="modbus", port="COM9", slave=1, func=3, addr=3,
+            count=1, op="gt", value=1000)              # 自己按 poll_ms 组帧轮询，复用会话
+# …… 这段时间去干别的（读变量、看反汇编、改代码）……
+trigger_wait(id="trg1", timeout_s=30)                  # 一次等到；block=false 只取快照
+trigger_list()                                        # 谁在等 / 谁已命中 / 错的在哪
+trigger_cancel(id="trg1")                             # 不用了停掉
+```
+
+四条口径（别读反）：
+- **只认新事件**：`trigger_wait` 调用瞬间记下各触发已有的命中数，**旧命中不会让它立刻返回**；
+  `repeat=true` 的触发也一样。`op="change"` 的**首个样本只建基线**，不算命中。
+- **端口只借不抢**：串口触发借用 `serial_monitor_start` 已持有的端口（没持有时直接报错让你先起
+  监听）；Modbus 走 `modbus.ensure` 复用会话，避免 DTR 抖动复位目标板。
+- **偶发错误不杀**：一次无应答只计 `errors` 继续等，连续 20 次（`max_consecutive_errors`）才转
+  `error`。串口监听被停/换实例 → 立刻 `error` 并给指路，**不假装还在等**。
+- **一定有终点**：`duration_s`（默认 900s）到点 `expired`；同时最多 8 个；进程退出全停。
+- `trigger_wait` **超时不等于条件不成立**，只说明这段时间没等到；要看现场用 `trigger_list`。
 
 ### 5. UVSOCK 不可用时的降级通道（命令行批处理）
 
@@ -487,7 +511,7 @@ RTT、变量 scope、halt 采样、DWT 计数、PC 采样这些**观测**工具�
 - **参数别名**：`query`/`name`/`expression`、`addr`/`address`、`timeout_ms`/`timeout_s`
   这类直觉写法都能落地；但**未列出的参数名会被拒绝**（不会静默用默认值），报错里会列出可用参数。
 - **工具面默认精简**：默认只暴露 42 个（`core` 39 个，其中 `mdk_guide` 兼作元工具，再加 3 个元工具），
-  其余 185 个按需装载——`toolset(action="load", toolsets="mem,trace")` 装回来、`toolset(action="status")`
+  其余 189 个按需装载——`toolset(action="load", toolsets="mem,trace")` 装回来、`toolset(action="status")`
   看现状、`toolset(action="groups")` 列组/档总览；启动时也可用 `MDKDEBUG_TOOLSETS=serial` 指定
   （参数优先），`=all` 全开。可用组名见 `mdk_guide(topic="capabilities")`。
   **批次109 起 `toolset` 是唯一的查询 + 装卸入口**（原 `tools_groups` / `tools_load` 已并入，

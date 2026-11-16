@@ -239,7 +239,7 @@ mdk_agent/
 ├── requirements.txt          # Python 依赖
 ├── README.md
 ├── mdkdebug/
-│   ├── __init__.py           # 包初始化（版本号 0.2.35）
+│   ├── __init__.py           # 包初始化（版本号 0.2.36）
 │   ├── cli.py                # 命令行入口（main，mdkdebug 命令）
 │   ├── uvsock.py             # UVSOCK 协议：命令码、VSET/AMEM/EXECCMD 打包与解析
 │   ├── interface.py          # TCP 物理接口层（含异步消息残留清理）
@@ -256,7 +256,7 @@ mdk_agent/
 │   ├── linkio.py             # 链路原语层：把「读/写内存、读核寄存器、停/走」从 Keil(UVSOCK) 与 OpenOCD 里抽出来
 │   ├── traceproto.py         # trace 协议：ITM 解码、MTF 帧格式与 CRC8
 │   ├── trace.py              # trace：SWO / RTT（主机侧自研）/ SWD 采样 / DWT / 插桩组件部署（观测类工具两条链路通用）
-│   └── server.py             # MCP Server 与 227 个工具定义
+│   └── server.py             # MCP Server 与 231 个工具定义
 ├── components/
 │   └── trace/                # 目标侧插桩组件（ITM / RTT / UART / BUFF 四后端，只依赖 CMSIS）
 │                             #   mdk_trace.[ch] / mdk_trace_rtt.[ch] / config 默认头 / CMakeLists / README
@@ -350,7 +350,7 @@ mdkdebug read_mem --arg addr=0x20000000 --arg n=16     # 省略 call 的简写
 
 ## 暴露的 MCP 工具
 
-共 **227** 个（**默认只暴露 42 个**，其余按需装载，见[工具面](#工具面默认精简--按需装载)），分两大块：
+共 **231** 个（**默认只暴露 42 个**，其余按需装载，见[工具面](#工具面默认精简--按需装载)），分两大块：
 
 - **MDK 族（144 个）**——调试读写 / 断点与命中等待 / 外设与内存 / 符号定位 / 工程分析 / **编译·清理·烧录** / **UV4 命令行批处理调试** / **CMSIS-SVD 解码** / **工程文件与分散加载文件(.sct)受控编辑** / **复位循环识别** / Keil 生命周期管理 / **宿主机串口日志与命令应答 · Modbus 主站（RTU/ASCII + 裸帧）** / **看门狗冻结与 Cache 感知** / 环境自检引导（下表）。
 - **非 MDK 族（82 个）**——**工具链**（gcc/make/cmake 探测与调用、构建、ELF/size/objcopy、编译错误解析，10 个）/ **目标档案与多核**（接口·速度·SWO·RTT 参数档案与自动识别、工程现场配置发现、多核目标的核列举与切换，7 个）/ **OpenOCD**（会话·内存·寄存器·断点·烧录，17 个）/ **trace 与覆盖率**（SWO·RTT·采样剖析·DWT·非侵入式 scope·插桩组件部署·**代码覆盖率**·**ETM 能力探测**·**函数运行时线录制**·**目标侧缓冲后端**·**SWD 无缝流后端**·**任务表取名**，38 个）/ **RTOS 任务感知**（任务列表·栈水位·队列信号量，3 个）/ **C 代码索引**（建/同步索引·符号检索·单符号源码体·文件清单·调用关系与影响面，7 个）——不依赖 Keil，同样能在 RISC-V / ESP32 等非 MDK 芯片上工作（见[非 MDK 芯片与 trace](#非-mdk-芯片与-trace不依赖-keil)）。
@@ -711,14 +711,14 @@ target_guess(elf) → ocd_start(profile=...) → ocd_flash(file=...) → trace_i
 
 ### 工具面（默认精简 + 按需装载）
 
-227 个工具全量塞进上下文会稀释注意力、也吃掉上下文预算。所以**默认只暴露 42 个**（`core` 组 39 个，其中 `mdk_guide` 兼作元工具，再加另外 3 个元工具），其余 185 个**没被删掉、也没失效**，用 `toolset` 工具随时装回来：
+227 个工具全量塞进上下文会稀释注意力、也吃掉上下文预算。所以**默认只暴露 42 个**（`core` 组 39 个，其中 `mdk_guide` 兼作元工具，再加另外 3 个元工具），其余 189 个**没被删掉、也没失效**，用 `toolset` 工具随时装回来：
 
 ```text
 toolset(action="status")                        # 装了哪些组、收起多少个、怎么装回来
 toolset(action="groups")                        # 组/档总览（toolsets=mem 则列出该组工具名）
 toolset(action="load",   toolsets="mem,rtos")   # 追加装载（幂等，可反复调）
 toolset(action="unload", toolsets="trace")      # 收起
-toolset(action="load",   toolsets="all")        # 一次全装 227 个（=full/*）
+toolset(action="load",   toolsets="all")        # 一次全装 231 个（=full/*）
 ```
 
 装载也可以放在启动时：`MDKDEBUG_TOOLSETS=serial` 只留串口 14 个、`core,build`、`toolchain,target,ocd,trace` 把上百个 Keil 工具全收起来调非 MDK 芯片；`=all` 回到全开。**启动参数优先于环境变量**。
@@ -750,8 +750,8 @@ toolset(action="load",   toolsets="all")        # 一次全装 227 个（=full/*
 |---|---|---|---|---|
 | 默认（`core` 组 + 元工具，描述 `lean`） | 42 | 约 2.2 万 | **约 3.9 万** | 不设环境变量 |
 | **`nano` 极简档**（自动用 `min` 描述档） | **16** | **约 5.4 千** | **约 1.3 万** | `MDKDEBUG_TOOLSETS=nano` 或 `toolset(action=load, toolsets="nano")` |
-| `all`（全装，描述默认 `lean`） | 227 | 约 11.9 万 | 约 24.2 万 | `toolset(action=load, toolsets="all")` |
-| `all` + `MDKDEBUG_DESC=min` | 227 | 约 7.7 万 | 约 20 万 | 工具全要，但描述只留一句摘要 |
+| `all`（全装，描述默认 `lean`） | 231 | 约 11.9 万 | 约 24.2 万 | `toolset(action=load, toolsets="all")` |
+| `all` + `MDKDEBUG_DESC=min` | 231 | 约 7.7 万 | 约 20 万 | 工具全要，但描述只留一句摘要 |
 | 上述任一档 + `MDKDEBUG_DESC=full` | — | 逐字节还原全文 | — | 要逐字完整说明时 |
 
 - **`nano` 档**不是「组」而是**档位**：它横跨 `core` / `build` / `trace` 三组，挑出最短入口（健康检查 / 编译烧录 / 进出调试 / 跑停 / 读写内存与变量 / 断点 / 读 trace / **取回完整说明的 `mdk_guide`** / **装卸工具面的 `toolset`**）**＋ 另外 2 个元工具**，小上下文模型也能一次装全，之后再按需加装。
@@ -983,6 +983,41 @@ modbus_raw(req="01 03 00 00 00 01", auto_crc=True, port="COM9", baud=9600)
 modbus_sniff(duration_ms=3000, port="COM9")    # 旁听：别人在问什么（不发一个字节）
 modbus_session(action="close")                 # 用完把口还回去
 ```
+
+### 条件触发：登记后后台盯，不必反复轮询（`trigger_*`，4 个，批次112）
+
+「等某行日志出现」「等某寄存器到阈值」这类事，让 AI 一直轮询是浪费——**`trigger_add` 把条件
+登记到后台线程**（每触发一个 daemon 线程），**登记完立刻返回**，AI 该干什么干什么；合适的时候
+`trigger_wait` 一次等到，或 `block=false` 只取一份快照。
+
+| 工具 | 用途 | 主要参数 |
+| --- | --- | --- |
+| `trigger_add` | **登记一个条件触发**（`kind="serial"` / `"modbus"`），后台按 `poll_ms` 盯，命中记进 `fires`。串口触发**只借用** `serial_monitor_start` 已持有的端口（不自开，不抢口）；Modbus 走 `modbus.ensure` **复用会话**（避免 DTR 抖动复位目标板）。`op` 支持 `eq/ne/gt/ge/lt/le/change/mask_set/mask_clear`；`op="change"` 的首次采样**只建基线**、不算命中。`repeat=true` 可多次命中（配 `cooldown_s` / `max_fires`），`on_fire="serial_send"` / `"modbus_write"` 命中后自动回一帧 | `kind`、`pattern?`、`regex?`、`port?`、`slave?`、`func?`、`addr?`、`count?`、`index?`、`op?`、`value?`、`mask?`、`poll_ms?`、`label?`、`duration_s?`、`repeat?`、`max_fires?`、`on_fire?`、`send?`、`write_addr?`、`write_value?` |
+| `trigger_list` | **快照**：每个触发的 `state`（`waiting`/`fired`/`stopped`/`expired`/`error`）、`polls`/`errors`、最近命中 `fires`（最多 20 条）、`last_value`/`last_hex`/`last_sample_at`；`with_finished=false` 只看在等的 | `id?`、`with_finished?` |
+| `trigger_wait` | **等**：阻塞到命中 / 终态 / 超时。**只认这次调用之后的新命中**（调用瞬间记下各触发的已有命中数，旧的命中不会让它立刻返回）；超时明确回 `timed_out=true` — **超时不等于条件不成立** | `id?`、`timeout_s?`（默认 30）、`block?` |
+| `trigger_cancel` | **停**：置 `stopped` 并唤醒所有在等它的调用 | `id?`、`reason?` |
+
+```text
+# 等目标板打出 READY（先 serial_monitor_start 持有端口，触发只是借用）
+trigger_add(kind="serial", pattern="READY", label="上电就绪")   # → {"ok":true,"id":"trg1","state":"waiting"}
+trigger_list()                                                 # 干别的事之前先看一眼
+trigger_wait(id="trg1", timeout_s=30)                          # 干完别的再来等；block=false 只取快照
+trigger_cancel(id="trg1")
+
+# 等 3 号保持寄存器超过 1000（自己按 200ms 组帧轮询，复用 modbus 会话）
+trigger_add(kind="modbus", port="COM9", baud=9600, slave=1,
+            func=3, addr=3, count=1, op="gt", value=1000, label="温度过限")
+```
+
+四条口径：
+- **只认新事件**：`trigger_wait` 把「登记之前的命中」和「这次等到的」分开，`repeat` 触发不会被
+  上一次的旧命中骗过；`op="change"` 首样本只建基线。
+- **端口只借不抢**：串口触发依赖已持有的监听，监听被停/换实例时触发立刻转 `error` 并给指路，
+  **绝不假装还在等**；Modbus 复用会话，不自开端口。
+- **偶发错误不杀**：单次无应答只计 `errors` 继续等，连续 20 次（可配 `max_consecutive_errors`）
+  才转 `error`——「一直没数据」和「一时没回」是两件事。
+- **一定有终点**：`duration_s`（默认 900s，与串口/Modbus 空闲释放同量级）到点转 `expired`；
+  进程退出 `atexit` 全停；同时最多 8 个触发。
 
 ## 设计要点
 
@@ -1815,6 +1850,15 @@ uVision 再打开就报错。批次97 把这条纪律做成**工具能执行的�
 > **不合并的**：`uvprojx_read` / `uvprojx_edit` / `project_file_check` / `project_file_repair`
 > （读、写、体检、修复四件事，风险与返回形态都不同）、`recover_bindiff` 的两种模式之外的同构
 > 工具（后端不同，前端壳相同但底座是两套实现）、以及连接器层——那一层只有一个服务，不是重复实现。
+
+> **批次112（0.2.36）：条件触发（串口 / Modbus）——登记后后台盯，不必反复轮询**。工具面新增
+> 四个（227 → 231）：`trigger_add` / `trigger_list` / `trigger_wait` / `trigger_cancel`，全在
+> **`serial` 工具组**里，所以**默认暴露面仍是 42、默认上下文零变化**。语义四件事写死：
+> ① **只认新事件**（`wait` 记下调用瞬间的命中数作基线，`repeat` 不会被旧命中骗过；`op=change`
+> 首样本只建基线）；② **端口只借不抢**（串口借 `serialmon` 已持端口、Modbus 复用 `modbus.ensure`
+> 会话，监听被停立刻转 `error`，绝不假装还在等）；③ **偶发错误不杀**（连续 20 次才转 error）；
+> ④ **一定有终点**（`duration_s` 默认 900s 转 `expired`，`atexit` 全停，上限 8 个）。
+> 超时回 `timed_out=true` 并明说**超时不等于条件不成立**。零新增依赖。
 
 > **批次111（0.2.35）：trace 六条通路互指路 + 状态工具分工收敛**。上一轮审计发现 `trace_*` 有
 > 三十多个工具，而「六条通路」只在各处零散地讲，读者容易一上来就选错路（拿 `trace_profile`

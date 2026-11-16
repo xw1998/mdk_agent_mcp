@@ -10,7 +10,7 @@
   C 熵与签名：分块熵、高熵区间、压缩签名流校验（假头被拒）
   D inspect：ELF/HEX/bin 三格式端到端 + 大文件截断 + 上限
   E carve  ：目录必须不存在、独占写、SHA-256 回读、上限进 gaps、HEX 拒绝
-  F 工具面 ：注册 227 / build 20 / 默认面 42 / 注解归类 / 端到端
+  F 工具面 ：注册 231 / build 20 / 默认面 42 / 注解归类 / 端到端
   G 闭环   ：artifact_changed 是独立判定，不混进 flash_failed
 
 运行：python -m tests.test_batch78
@@ -328,7 +328,7 @@ def section_f():
 
     all_n = len(asyncio.run(SV.create_server(port=PORT, toolsets="all").list_tools()))
     core_n = len(asyncio.run(SV.create_server(port=PORT, toolsets="core").list_tools()))
-    check("F4 注册总数 227", all_n == 227, all_n)
+    check("F4 注册总数 231", all_n == 231, all_n)
     check("F5 默认面仍 42（取证工具不在默认面）", core_n == 42, core_n)
 
     a1 = AN.annotations_for("image_inspect")

@@ -330,7 +330,7 @@ def section_e():
     from mdkdebug import server as SV
     srv = SV.create_server(port=15981, toolsets="all")
     tools = {t.name: t for t in asyncio.run(srv.list_tools())}
-    check("E1 注册总数 227（批次88 +1）", len(tools) == 227, len(tools))
+    check("E1 注册总数 231（批次88 +1）", len(tools) == 231, len(tools))
     props = (tools.get("recover_ledger").input_schema.get("properties") or {})
     check("E2 参数齐全（project_dir/image/base/verify_json/arm_bin/skip_build/窗口）",
           all(k in props for k in ("project_dir", "image", "base", "verify_json",

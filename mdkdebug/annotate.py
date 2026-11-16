@@ -52,6 +52,8 @@ READONLY = {
     "toolchain_size", "toolchain_errors", "target_list", "target_show", "target_guess",
     "debug_config",
     "trace_scope_read",
+    # 批次112：只看触发的状态/等它命中——不改目标、不改串口配置（wait 只是等）。
+    "trigger_list", "trigger_wait",
     # 覆盖率：只有「读快照」是纯只读；start/stop/clear 会起停后台线程、
     # 并可能改写 DEMCR/DWT_CTRL（restore=true 时会恢复原值，但仍是写目标）。
     "coverage_read",
@@ -153,6 +155,8 @@ DESTRUCTIVE = {
 # ----------------------------------------------------------------------
 NON_IDEMPOTENT = {
     "serial_write", "serial_expect", "launch_uvision", "restart_keil",
+    # 每调一次 trigger_add 就多一条触发（不是「只登记一条」的幂等动作）。
+    "trigger_add",
     # modbus_raw 可能发的是写请求（内容不限，工具不知道语义）；
     # modbus_session 的 open/close 会改变端口持有状态。
     "modbus_raw", "modbus_session",
@@ -202,6 +206,8 @@ MUTATING = {
     # 工具面装卸（批次56/109）：改变上下文里的工具面，属于改状态。
     # 原 tools_load / tools_groups 已并入 toolset（一个工具同时管问与装卸）。
     "toolset",
+    # 批次112：登记触发会起后台线程（可能发字节/写寄存器），取消会停线程。
+    "trigger_add", "trigger_cancel",
     "batch", "batch_debug_script", "build_and_flash", "build_project",
     "clean_project", "clear_all_breakpoints", "clear_all_watchpoints",
     "clear_breakpoint", "clear_faults", "clear_uvoptx_breakpoints",

@@ -141,7 +141,7 @@ def _u32(v):
 def section_a():
     print("A. 工具面与注解")
     total = len(set(TB.ALWAYS) | {n for _v in TB.TOOLSETS.values() for n in _v})
-    check("A1 注册工具总数 227（分组表 204 + 常驻 3）", total == 227, total)
+    check("A1 注册工具总数 231（分组表 204 + 常驻 3）", total == 231, total)
     for t in ("coverage_start", "coverage_read", "coverage_stop", "coverage_clear",
               "trace_etm_probe"):
         check("A2 %s 归在 trace 组" % t, t in (TB.TOOLSETS.get("trace") or []), "")

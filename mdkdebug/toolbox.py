@@ -140,6 +140,9 @@ TOOLSETS = {
         "modbus_scan", "modbus_sniff", "modbus_session",
         # 批次106：多次采样把「常量/状态位/会变/无应答」分开——单次读数回答不了的问题。
         "modbus_pointmap",
+        # 批次112：条件触发——登记条件后后台盯着，AI 去做别的事，最后等一次结果，
+        # 不必反复 serial_read / modbus_read 轮询。与串口/Modbus 同组：用的就是它们那条链路。
+        "trigger_add", "trigger_list", "trigger_wait", "trigger_cancel",
     },
     "advanced": {
         "clear_faults", "fault_report", "wait_fault", "watch_reset", "dwt",

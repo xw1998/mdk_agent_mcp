@@ -167,7 +167,8 @@ def section_e():
     rd = _src("README.md")
     check("E1 README 里有 trace_guide(topic=routes) 入口", "topic=routes" in rd, None)
     init = _src("mdkdebug/__init__.py")
-    check("E2 版本号到 0.2.35", "0.2.35" in init, init[-160:])
+    _v = tuple(int(x) for x in re.search(r'__version__ = "(\d+)\.(\d+)\.(\d+)"', init).groups())
+    check("E2 版本号不低于 0.2.35（下限，不锁死具体值）", _v >= (0, 2, 35), init[-160:])
     check("E3 本批登记进全量闸门", '"test_batch111"' in _src("tools/run_all_tests.py"),
           None)
     ok = True
