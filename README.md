@@ -239,7 +239,7 @@ mdk_agent/
 ├── requirements.txt          # Python 依赖
 ├── README.md
 ├── mdkdebug/
-│   ├── __init__.py           # 包初始化（版本号 0.2.38）
+│   ├── __init__.py           # 包初始化（版本号 0.3.0）
 │   ├── cli.py                # 命令行入口（main，mdkdebug 命令）
 │   ├── uvsock.py             # UVSOCK 协议：命令码、VSET/AMEM/EXECCMD 打包与解析
 │   ├── interface.py          # TCP 物理接口层（含异步消息残留清理）
@@ -1924,7 +1924,7 @@ uVision 再打开就报错。批次97 把这条纪律做成**工具能执行的�
 > （读、写、体检、修复四件事，风险与返回形态都不同）、`recover_bindiff` 的两种模式之外的同构
 > 工具（后端不同，前端壳相同但底座是两套实现）、以及连接器层——那一层只有一个服务，不是重复实现。
 
-> **批次114（0.2.38）：接入 pyOCD 作为第三条调试链路（`pyocd_*`，15 个）**。没装 Keil、
+> **批次114（0.3.0）：接入 pyOCD 作为第三条调试链路（`pyocd_*`，15 个）**。没装 Keil、
 > 不想开 uVision、或在无界面机器上时，前两条链路都断；pyOCD 是纯 Python 进程内 `Session`
 > （`pip install pyocd` 后 CMSIS-DAP / J-Link / ST-Link 都能连，烧录走 CMSIS-Pack FLM）。
 > 工具面 231 → **246**，全部归入 `pyocd` 组**默认收起**，所以**默认暴露面仍是 42**、

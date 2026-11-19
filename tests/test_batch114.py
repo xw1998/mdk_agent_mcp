@@ -488,9 +488,9 @@ def section_e(srv):
           and "pyocd_start" in skill, None)
     init = _src("mdkdebug/__init__.py")
     pp = _src("pyproject.toml")
-    check("E2 版本三处同步到 0.2.38",
-          '__version__ = "0.2.38"' in init and 'version = "0.2.38"' in pp
-          and "0.2.38" in readme, None)
+    check("E2 版本三处同步到 0.3.0",
+          '__version__ = "0.3.0"' in init and 'version = "0.3.0"' in pp
+          and "0.3.0" in readme, None)
     gat = _src("tools/run_all_tests.py")
     check("E3 tools/run_all_tests.py 已登记 test_batch114",
           "test_batch114" in gat, None)
