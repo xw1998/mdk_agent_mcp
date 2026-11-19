@@ -94,14 +94,14 @@ def section_a():
     print("A. 工具面规模")
     srv = fresh(toolsets="all")
     allnames = names(srv)
-    check("A1 注册总数 231", len(allnames) == 231, len(allnames))
+    check("A1 注册总数 246", len(allnames) == 246, len(allnames))
     check("A2 常驻元工具 4 个（list_tools/get_version/mdk_guide/toolset）",
           TB.ALWAYS == {"list_tools", "get_version", "mdk_guide", "toolset"},
           sorted(TB.ALWAYS))
     check("A3 装卸元工具只在 toolset 一处（旧名已物理删除）",
           "toolset" in allnames and "tools_groups" not in allnames
           and "tools_load" not in allnames)
-    check("A4 annotate 对全部 231 个工具无问题",
+    check("A4 annotate 对全部 246 个工具无问题",
           not A.check_surface(allnames), A.check_surface(allnames)[:3])
     check("A5 toolset 标可写（load/unload 会改暴露面）",
           A.annotations_for("toolset").get("readOnlyHint") is False,
@@ -117,9 +117,9 @@ def section_a():
         check("A8 默认不含 trace 组工具（按需装载）",
               "trace_swd_read" not in dn and "ocd_start" not in dn)
         st = call_sync(d, "toolset", {"action": "status"})
-        check("A9 status 自述一致（暴露 42 / 收起 189 / 注册 231）",
-              st.get("exposed") == 42 and st.get("hidden") == 189
-              and st.get("total_registered") == 231, st)
+        check("A9 status 自述一致（暴露 42 / 收起 204 / 注册 246）",
+              st.get("exposed") == 42 and st.get("hidden") == 204
+              and st.get("total_registered") == 246, st)
     finally:
         if saved is not None:
             os.environ["MDKDEBUG_TOOLSETS"] = saved
@@ -397,11 +397,11 @@ def section_i():
           "nano" in readme and "MDKDEBUG_DESC" in readme, "")
     check("I2 README 写装卸只有一个入口 toolset（并给出旧名迁移表）",
           'toolset(action="groups")' in readme and 'toolset(action="load"' in readme, "")
-    check("I3 README 工具数同步为 231（231 个 + 收起 189）",
-          "231 个" in readme and "189 个" in readme and "160 个" not in readme, "")
+    check("I3 README 工具数同步为 246（246 个 + 收起 204）",
+          "246 个" in readme and "204 个" in readme and "160 个" not in readme, "")
     check("I4 SKILL 写了 nano 档与描述分层",
           "nano" in skill and "MDKDEBUG_DESC" in skill and "mdk_guide" in skill, "")
-    check("I5 SKILL 工具数同步为 231", "231 个工具" in skill and "184 个工具" not in skill, "")
+    check("I5 SKILL 工具数同步为 246", "246 个工具" in skill and "184 个工具" not in skill, "")
 
 def main():
     for fn in (section_a, section_b, section_c, section_d, section_e,

@@ -214,8 +214,12 @@ def section_b():
 
     # B2：直接把重毒化环境交给 python，死在 site 初始化——把这条边界写成事实
     rc, out, err = _run([PY, os.path.join(ROOT, "run_server.py"), "--version"], bad)
+    # 不同 CPython 版本走到 site 初始化时的第一个 stdlib import 不同：有的直接
+    # 在 init_import_site 里炸，有的先经 locale.py → re；两者都证明「一行自己的
+    # 代码都没执行到」，所以两种指纹都收。
     check("B2 重毒化下裸启动死在 site 初始化（进程内无解，必须有启动脚本）",
-          rc != 0 and "init_import_site" in err, (rc, err[-300:]))
+          rc != 0 and ("init_import_site" in err or "SRE module mismatch" in err),
+          (rc, err[-300:]))
 
     # B3：温和毒化（污染存在、但不在 site 初始化阶段被 import）→ bootstrap 自愈
     mild = tmpdir()

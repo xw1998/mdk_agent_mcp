@@ -43,6 +43,7 @@ docs/*
 !docs/mcp-issues.md
 # 预注册（冻结判据）必须随仓库走：判据要能被后来者逐条核对，留在本地等于没有预注册。
 !docs/trigger-memory-prereg.md
+!docs/pyocd-link.md
 
 # README 里引用的回放页与截图必须真正进仓库，否则 gitee 上显示为空白/裂图。
 # docs/* 用来挡生成物（如 docs/.gen_utf8），这里把 docs/demo 单独放出来。

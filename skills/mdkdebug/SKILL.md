@@ -5,7 +5,7 @@ description: 用 mdkdebug MCP 驱动 Keil uVision 做在线调试——读变量
 
 # mdkdebug —— Keil 在线调试的组合拳
 
-mdkdebug 是一个把 Keil uVision 变成「可被 AI 调用」的 MCP 服务，共 231 个工具。
+mdkdebug 是一个把 Keil uVision 变成「可被 AI 调用」的 MCP 服务，共 246 个工具。
 本技能告诉你**先调什么、按什么顺序调、遇到问题找谁**，避免在近百个工具里瞎试。
 
 ## 零、怎么把它起来（含宿主环境隔离）
@@ -246,6 +246,30 @@ batch_debug_script(init_file=...)   # 每轮 15~25s；命令报错不改退出�
 
 注意三条硬限制（工具会做静态告警）：命令报错不改退出码、`DISPLAY`/`SAVE` 与
 `Go main` 会挂死。可重复的冒烟回归适合它，交互式调试仍应走 UVSOCK。
+
+### 5.5 没有 Keil、也不想拉起 OpenOCD：pyOCD 第三条链路（批次114）
+
+pyOCD 是纯 Python 的进程内会话（`pip install pyocd`，CMSIS-DAP / J-Link / ST-Link 都能连，
+烧录走 CMSIS-Pack 的 FLM，不需要 Keil）。**同一根探针同一时刻只能被一个调试宿主占着**
+（Keil / OpenOCD / pyOCD 互斥），连不上先查「是不是别处占着探针」。
+
+```
+pyocd_list()                                  # 先看有没有探针、pyocd 装没装、目标名怎么拼
+pyocd_start(target="stm32f401re")             # 不开探针忙时用 connect_mode="attach" 只挂上去
+pyocd_info()                                  # 这是谁 + memory_map（读地址前先确认范围）
+pyocd_read_mem(addr="0x20000000", n_bytes=64) # 返回值自带 read_confidence/degenerate
+pyocd_control(action="halt")                  # 要一致快照就显式停；工具**不会**替你 halt
+pyocd_flash(file="build/app.hex", chip_erase="auto")
+pyocd_stop()                                  # 结束显式关，别把探针占着
+```
+
+三条口径：① **读数与 Keil 同一套语言**——`read_confidence` 不是 high 时不要据此下结论
+（running 两读不一致给 medium：变量在变与读被打断分不开；halted 不一致给 low）；② **bin 烧录
+必须给 `base_address`**，elf/hex 自带地址；③ `pyocd_bp` / `pyocd_wp` 的 `list` 只列本模块
+登记过的，pyOCD 没有全局列表 API，别把它当成「目标上实际有几条断点」。
+
+没装 pyocd 时全部工具报 `pyocd-not-installed` 并给安装命令，server 本身照常启动。排障先看
+`pyocd_log`（探针被占、目标不给 ID、pack 里找不到器件，原因都写在里面）。
 
 ### 6. 只有固件没有工程：`.hex` / `.bin` / `.elf(.axf)` / `.lib` / `.so` → 工程骨架
 
@@ -527,7 +551,7 @@ RTT、变量 scope、halt 采样、DWT 计数、PC 采样这些**观测**工具�
 - **参数别名**：`query`/`name`/`expression`、`addr`/`address`、`timeout_ms`/`timeout_s`
   这类直觉写法都能落地；但**未列出的参数名会被拒绝**（不会静默用默认值），报错里会列出可用参数。
 - **工具面默认精简**：默认只暴露 42 个（`core` 39 个，其中 `mdk_guide` 兼作元工具，再加 3 个元工具），
-  其余 189 个按需装载——`toolset(action="load", toolsets="mem,trace")` 装回来、`toolset(action="status")`
+  其余 204 个按需装载——`toolset(action="load", toolsets="mem,trace")` 装回来、`toolset(action="status")`
   看现状、`toolset(action="groups")` 列组/档总览；启动时也可用 `MDKDEBUG_TOOLSETS=serial` 指定
   （参数优先），`=all` 全开。可用组名见 `mdk_guide(topic="capabilities")`。
   **批次109 起 `toolset` 是唯一的查询 + 装卸入口**（原 `tools_groups` / `tools_load` 已并入，

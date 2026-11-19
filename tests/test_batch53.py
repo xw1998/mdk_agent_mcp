@@ -140,7 +140,7 @@ def msg(group, kind, slot):
 def section_a():
     print("A. 工具面与注解")
     total = len(set(TB.ALWAYS) | {n for _v in TB.TOOLSETS.values() for n in _v})
-    check("A1 注册总数 231（分组表 198 + 常驻 3）", total == 231, total)
+    check("A1 注册总数 246（分组表 198 + 常驻 3）", total == 246, total)
     check("A2 trace_eventrec 归 trace 组（组规模 26->27，批次55 再加 3 个 buff 到 30，批次56 再加 3 个 swd 到 33，批次64 再加 1 个任务表到 34，批次72 再加 2 个分析层到 37，批次75 再加 trace_watch 到 38）",
           "trace_eventrec" in (TB.TOOLSETS.get("trace") or [])
           and gsize("trace") == 38, gsize("trace"))
@@ -151,10 +151,10 @@ def section_a():
     for v in TB.TOOLSETS.values():
         allnames |= set(v)
     bad = A.check_surface(sorted(allnames))
-    check("A4 check_surface 在 231 个工具上无问题", not bad, bad)
+    check("A4 check_surface 在 246 个工具上无问题", not bad, bad)
     exposed = len(set(TB.TOOLSETS["core"]) | set(TB.ALWAYS))
     check("A5 默认暴露 42（批次59 可视化 + 批次67 符号工具进 core，仍在默认面）", exposed == 42, exposed)
-    check("A6 默认收起 189（231-42）", 231 - exposed == 189, 231 - exposed)
+    check("A6 默认收起 204（246-42）", 246 - exposed == 204, 246 - exposed)
 
 def section_b():
     print("B. info 字位域")
@@ -474,12 +474,12 @@ def section_m():
     readme = rd("README.md")
     skill = rd("skills/mdkdebug/SKILL.md")
     check("M6 README 写的是 200 个工具、收起 156",
-          "231 个" in readme and "189 个" in readme and "160 个" not in readme
+          "246 个" in readme and "204 个" in readme and "160 个" not in readme
           and "139 个" not in readme, "")
     check("M7 README 工具表里有 trace_eventrec 一行（含 action 三个取值）",
           "trace_eventrec" in readme and "`status`/`read`/`stats`" in readme, "")
     check("M8 SKILL.md 工具数 200、收起 156、只读清单里有 trace_eventrec",
-          "231 个工具" in skill and "189 个" in skill and "trace_eventrec" in skill, "")
+          "246 个工具" in skill and "204 个" in skill and "trace_eventrec" in skill, "")
 
 def main():
     section_a()

@@ -68,6 +68,8 @@ READONLY = {
     "code_relations", "code_impact",
     "ocd_cfg_list", "ocd_status", "ocd_log", "ocd_probe", "ocd_flash_info",
     "ocd_read_mem",
+    # 批次114：pyOCD 链路的纯查询部分（列探针/查状态/目标身份/读内存/诊断）。
+    "pyocd_list", "pyocd_status", "pyocd_info", "pyocd_read_mem", "pyocd_log",
     "trace_guide", "trace_status", "trace_decode", "trace_events",
     # Event Recorder（批次53）：只读目标 RAM 缓冲 + 本地 .axf，不改目标状态、不占资源。
     "trace_eventrec",
@@ -160,7 +162,11 @@ NON_IDEMPOTENT = {
     # modbus_raw 可能发的是写请求（内容不限，工具不知道语义）；
     # modbus_session 的 open/close 会改变端口持有状态。
     "modbus_raw", "modbus_session",
-    "close_uvision", "ocd_start", "ocd_stop", "run", "run_timeout", "step",
+    "close_uvision", "ocd_start", "ocd_stop",
+    # 批次114：开会话/起 gdbserver 是一次性动作（同一参数再来一次必失败）；
+    # 烧录与擦除同理（第二次是重烧/重擦，不是同一件事）。
+    "pyocd_start", "pyocd_stop", "pyocd_flash", "pyocd_erase", "pyocd_gdb",
+    "run", "run_timeout", "step",
     "wait_fault", "trace_instrument", "toolchain_env", "session_state",
     "uvprojx_edit", "batch", "batch_debug_script", "flash_debug",
     # 闭环入口：编译 + 烧录 + 等令牌，重复调用不是「只做一次的效果」。
@@ -218,6 +224,10 @@ MUTATING = {
     "image_carve",
     "recover_project",
     "recover_project_exact", "recover_verify", "recover_ledger",
+    # 批次114：pyOCD 会改目标/占探针的那一半（开会话、运行控制、写内存、
+    # 写寄存器、断点、观察点、烧录、擦除、起 gdbserver）。
+    "pyocd_start", "pyocd_stop", "pyocd_control", "pyocd_write_mem", "pyocd_reg",
+    "pyocd_bp", "pyocd_wp", "pyocd_flash", "pyocd_erase", "pyocd_gdb",
     "itm_trace", "keil_command", "launch_uvision", "ocd_bp", "ocd_cmd",
     "ocd_control", "ocd_flash", "ocd_gdb", "ocd_load", "ocd_reg", "ocd_start",
     "ocd_stop", "ocd_wp", "ocd_write_mem", "profile_function",

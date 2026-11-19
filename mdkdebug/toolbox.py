@@ -174,6 +174,16 @@ TOOLSETS = {
         "ocd_bp", "ocd_wp", "ocd_flash", "ocd_flash_info", "ocd_load",
         "ocd_gdb", "ocd_log",
     },
+    # pyOCD：第三条调试链路（批次114）。不需要 Keil、不需要 OpenOCD，纯 Python
+    # 进程内连 CMSIS-DAP/J-Link/ST-Link，烧录走 CMSIS-Pack 的 FLM 算法。
+    # 默认收起：它只在「非 MDK / 不想开 uVision」的场景下才是主通道，
+    # 与 ocd 组同一口径（用 toolset 装回来，不占默认面的描述预算）。
+    "pyocd": {
+        "pyocd_list", "pyocd_start", "pyocd_stop", "pyocd_status", "pyocd_info",
+        "pyocd_control", "pyocd_read_mem", "pyocd_write_mem", "pyocd_reg",
+        "pyocd_bp", "pyocd_wp", "pyocd_flash", "pyocd_erase", "pyocd_gdb",
+        "pyocd_log",
+    },
     "trace": {
         "trace_guide", "trace_status", "trace_swo_start", "trace_swo_read",
         "trace_swo_stop", "trace_decode", "trace_events", "trace_clear",
@@ -296,6 +306,7 @@ GROUP_NOTES = {
     "toolchain": "非 MDK 构建：gcc/make/cmake 工具链探测、编译、ELF 分析",
     "target": "目标档案：RISC-V/ESP32 等目标型号、调试配置推断、多核目标列选",
     "ocd": "OpenOCD：启停、命令直通、内存/寄存器/断点/烧录、GDB server",
+    "pyocd": "pyOCD：进程内会话、内存/寄存器/断点/观察点、烧录擦除、GDB server",
     "trace": "trace：SWO/ITM、RTT、变量时间线、函数运行时线录制、DWT 计数、PC 采样、插桩",
     "rtos": "RTOS 任务感知：任务列表/状态、栈水位、队列信号量对象",
     "code": "代码结构索引：建/同步索引、符号检索、单符号源码体、文件清单、调用关系与影响面（C/C++）",

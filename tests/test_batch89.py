@@ -326,8 +326,8 @@ def section_d():
     srv = SV.create_server(port=15983, toolsets="all")
     tools = {t.name: t for t in asyncio.run(srv.list_tools())}
     names = set(tools)
-    check("D1 注册工具数仍是 231（批次89 只给既有工具加参数，不新增工具）",
-          len(names) == 231, len(names))
+    check("D1 注册工具数仍是 246（批次89 只给既有工具加参数，不新增工具）",
+          len(names) == 246, len(names))
     check("D2 build 组仍是 36 个且含 recover_ledger",
           len(TB.TOOLSETS["build"]) == 43 and "recover_ledger" in TB.TOOLSETS["build"],
           len(TB.TOOLSETS["build"]))

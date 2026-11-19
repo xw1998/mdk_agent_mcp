@@ -50,6 +50,7 @@ from . import outctl as _outctl
 from . import toolchain as _toolchain
 from . import targets as _targets
 from . import ocd as _ocd
+from . import pyocdlink as _pyocd
 from . import trace as _trace
 from . import workspace as _workspace
 from . import rtos as _rtos
@@ -1997,7 +1998,28 @@ def _get_client() -> UVClient:
 
 # 批次113：kind="memory" 的条件触发要读目标内存，而 triggers 不反向依赖 server，
 # 在这里把取客户端的函数注进去（与 builder.set_reset_connection_hook 同一手法）。
-_triggers.set_client_provider(lambda: _get_client())
+def _trigger_source():
+    """条件触发的读数源：Keil 连着就用 Keil，否则 pyOCD 会话开着就用 pyOCD。
+
+    只在「Keil 确实没连」时才换链路——Keil 连着时不静默改道：两条链路的读数
+    口径不同（谁在 halt、谁在读），替调用方选会掩盖「你到底在测哪块板」。
+    两条都不在时回到 _get_client()，让它抛原来的「未初始化/连不上」错误。
+    """
+    try:
+        c = _get_client()
+        if getattr(getattr(c, "phy", None), "is_connected", False):
+            return c
+    except Exception:  # noqa: BLE001
+        pass
+    try:
+        alt = _pyocd.session_if_open()
+        if alt is not None:
+            return alt
+    except Exception:  # noqa: BLE001
+        pass
+    return _get_client()
+
+_triggers.set_client_provider(_trigger_source)
 
 
 def _parse_addr(s: str | int) -> int:
@@ -11983,7 +12005,7 @@ def create_server(host: str = "127.0.0.1", port: int = 4823,
     # 不让整个 server 起不来。
     _extra_counts = {}
     for _mod_name, _mod in (("toolchain", _toolchain), ("targets", _targets),
-                            ("ocd", _ocd), ("trace", _trace),
+                            ("ocd", _ocd), ("pyocd", _pyocd), ("trace", _trace),
                             ("workspace", _workspace), ("rtos", _rtos),
                             ("resetwatch", _resetwatch),
                             ("coverage", _coverage),

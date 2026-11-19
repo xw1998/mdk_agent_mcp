@@ -144,7 +144,7 @@ def section_a():
     trig = sorted(n for n in names if n.startswith("trigger"))
     check("A1 四个 trigger 工具都注册了",
           trig == ["trigger_add", "trigger_cancel", "trigger_list", "trigger_wait"], trig)
-    check("A2 注册总数 231（227 + 4）", len(names) == 231, len(names))
+    check("A2 注册总数 246（227 + 4）", len(names) == 246, len(names))
     check("A3 注解表覆盖完整", AN.check_surface(sorted(names)) == [],
           AN.check_surface(sorted(names)))
     core = set(TB.TOOLSETS["core"]) | set(TB.ALWAYS)
@@ -503,7 +503,10 @@ def section_f():
     check("F1 README 有 trigger_add 的用法与「不阻塞」口径",
           "trigger_add" in readme and "trigger_wait" in readme, None)
     check("F2 SKILL.md 写了触发流程", "trigger_add" in skill, None)
-    check("F3 版本号 ≥ 0.2.36", "0.2.36" in init or "0.2.37" in init, init[-120:])
+    import re as _re
+    _m = _re.search(r'__version__\s*=\s*"(\d+)\.(\d+)\.(\d+)"', init)
+    _v = tuple(int(x) for x in _m.groups()) if _m else (0, 0, 0)
+    check("F3 版本号 ≥ 0.2.36", _v >= (0, 2, 36), _v)
     check("F4 闸门已登记 test_batch112", "test_batch112" in gate, None)
     for rel in ("mdkdebug/triggers.py", "mdkdebug/server.py", "tests/test_batch112.py"):
         try:

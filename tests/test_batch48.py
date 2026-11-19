@@ -200,7 +200,7 @@ def patch_segments(segs):
 def section_a():
     print("A. 工具面与注解")
     total = len(set(TB.ALWAYS) | {n for _v in TB.TOOLSETS.values() for n in _v})
-    check("A1 注册工具总数 231（分组表 204 + 常驻 3）", total == 231, total)
+    check("A1 注册工具总数 246（分组表 204 + 常驻 3）", total == 246, total)
     check("A2 reloc_check 归在 symbol 组（批次67 两个符号修复工具上移 core 后 9->7）",
           "reloc_check" in (TB.TOOLSETS.get("symbol") or []) and gsize("symbol") == 7,
           gsize("symbol"))

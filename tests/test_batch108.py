@@ -8,7 +8,7 @@
 
 分节：
 
-  A 工具面：注册 231 / build 43 / 唯一归组 / 注解 / schema / 别名 / surface
+  A 工具面：注册 246 / build 43 / 唯一归组 / 注解 / schema / 别名 / surface
   B available：结构、缺 unicorn / 缺工具链 / 缺 armlink 三档如实报 not_supported
   C symdefs 纯逻辑：真 axf 生成、裸 bin 报 no_symdefs、无符号 ELF 报 no_symdefs
   D 装载与布局：ER_ZI 节要进 regions（armlink 的 RW/ZI 不在 PT_LOAD 里）、重叠检测
@@ -112,8 +112,8 @@ def section_a():
     names = set(tools)
     check("A1 recover_c_parity 已注册", "recover_c_parity" in names,
           [n for n in NEW_TOOLS if n not in names])
-    check("A2 注册总数 231（批次107 后为 231，本批 +1）",
-          len(names) == 231, len(names))
+    check("A2 注册总数 246（批次107 后为 246，本批 +1）",
+          len(names) == 246, len(names))
     check("A3 build 组 43 个（批次107 后为 44，本批 +1）",
           len(TB.TOOLSETS["build"]) == 43, len(TB.TOOLSETS["build"]))
     check("A4 只归 build 一组",
@@ -444,7 +444,7 @@ def section_g():
     sk = open(os.path.join(ROOT, "skills", "mdkdebug", "SKILL.md"),
               encoding="utf-8").read()
     from mdkdebug import __version__ as V
-    check("G6 SKILL 同步到 231 个工具", "231 个工具" in sk, None)
+    check("G6 SKILL 同步到 246 个工具", "246 个工具" in sk, None)
 
     py = open(os.path.join(ROOT, "pyproject.toml"), encoding="utf-8").read()
     check("G7 版本三处同步（__init__ / pyproject / README）",

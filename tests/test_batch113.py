@@ -6,7 +6,7 @@
 
 分节：
 
-  A 工具面：不新增工具（注册 231、默认面 42、serial 组 19）、注解无遗漏
+  A 工具面：不新增工具（注册 246、默认面 42、serial 组 19）、注解无遗漏
   B 参数与错误：G2 的八类问题各自有 error_code，**不得**退化成 waiting
   C 脏读免疫（G3，核心）：伪值不建基线、不判命中；medium 不参与；连续 ambiguous 转 error
   D 端到端（假客户端）：eq/change/repeat/非阻塞快照/读失败/到期/上限/预算
@@ -115,7 +115,7 @@ def section_a():
     names = [t.name for t in asyncio.run(srv.list_tools())]
     ALWAYS = set(TB.ALWAYS)
     allset = set(ALWAYS) | {n for v in TB.TOOLSETS.values() for n in v}
-    check("A1 不新增工具：注册仍 231", len(allset) == 231, (len(allset), len(names)))
+    check("A1 不新增工具：注册仍 246", len(allset) == 246, (len(allset), len(names)))
     check("A2 默认暴露仍 42", len(set(TB.TOOLSETS["core"]) | ALWAYS) == 42,
           len(set(TB.TOOLSETS["core"]) | ALWAYS))
     check("A3 serial 组仍 19（不加工具，只加 kind）",

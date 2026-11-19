@@ -577,15 +577,15 @@ def group_g():
     srv_all = SV.create_server(port=PORT_TOOL, toolsets="all")
     na = tool_names(srv_all)
 
-    check("G1 注册总数 231", len(na) == 231, len(na))
+    check("G1 注册总数 246", len(na) == 246, len(na))
     check("G2 默认只暴露 42 个", len(nd) == 42, len(nd))
     check("G3 code 组默认收起（7 个 code_* 都不在默认面）",
           not any(t.startswith("code_") for t in nd),
           [t for t in nd if t.startswith("code_")])
     check("G4 code 组正好是那 7 个工具",
           TB.TOOLSETS.get("code") == set(CODE_TOOLS), TB.TOOLSETS.get("code"))
-    check("G5 组数 12，且每组都有用途说明",
-          len(TB.TOOLSETS) == 12 and len(TB.GROUP_NOTES) == 12
+    check("G5 组数 13，且每组都有用途说明",
+          len(TB.TOOLSETS) == 13 and len(TB.GROUP_NOTES) == 13
           and "code" in TB.GROUP_NOTES, (len(TB.TOOLSETS), len(TB.GROUP_NOTES)))
     check("G6 高输出工具 47 个（批次68 +4、批次69 +2）",
           len(OC.HIGH_OUTPUT) == 47, len(OC.HIGH_OUTPUT))
@@ -600,10 +600,10 @@ def group_g():
     srv_fresh = SV.create_server(port=PORT_DEF + 2, toolsets=None)
     cap = call_sync(srv_fresh, "mdk_guide", {"topic": "capabilities"})
     surf = cap.get("tool_surface") or {}
-    check("G9 mdk_guide(topic=capabilities) 的 tool_surface 里 code=7 且列为「未装载」、总数 231",
+    check("G9 mdk_guide(topic=capabilities) 的 tool_surface 里 code=7 且列为「未装载」、总数 246",
           (surf.get("groups") or {}).get("code") == 7
           and "code" in (surf.get("not_loaded_groups") or [])
-          and surf.get("registered_total") == 231, surf)
+          and surf.get("registered_total") == 246, surf)
 
 def main():
     print("批次69：关系与置信度（basis 三档 + 盲区统计 + code_relations / code_impact）")

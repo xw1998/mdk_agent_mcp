@@ -141,7 +141,7 @@ def _u32(v):
 def section_a():
     print("A. 工具面与注解")
     total = len(set(TB.ALWAYS) | {n for _v in TB.TOOLSETS.values() for n in _v})
-    check("A1 注册工具总数 231（分组表 204 + 常驻 3）", total == 231, total)
+    check("A1 注册工具总数 246（分组表 204 + 常驻 3）", total == 246, total)
     for t in ("coverage_start", "coverage_read", "coverage_stop", "coverage_clear",
               "trace_etm_probe"):
         check("A2 %s 归在 trace 组" % t, t in (TB.TOOLSETS.get("trace") or []), "")
@@ -173,7 +173,7 @@ def section_a():
           and group_size("trace") == 38,
           {"build": group_size("build"), "target": group_size("target"),
            "trace": group_size("trace")})
-    check("A7 12 个组都有用途说明", len(TB.GROUP_NOTES) == 12, sorted(TB.GROUP_NOTES))
+    check("A7 13 个组都有用途说明", len(TB.GROUP_NOTES) == 13, sorted(TB.GROUP_NOTES))
     check("A8 默认装载组只有 core", list(TB.DEFAULT_GROUPS) == ["core"], TB.DEFAULT_GROUPS)
 
 

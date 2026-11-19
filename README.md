@@ -239,7 +239,7 @@ mdk_agent/
 ├── requirements.txt          # Python 依赖
 ├── README.md
 ├── mdkdebug/
-│   ├── __init__.py           # 包初始化（版本号 0.2.37）
+│   ├── __init__.py           # 包初始化（版本号 0.2.38）
 │   ├── cli.py                # 命令行入口（main，mdkdebug 命令）
 │   ├── uvsock.py             # UVSOCK 协议：命令码、VSET/AMEM/EXECCMD 打包与解析
 │   ├── interface.py          # TCP 物理接口层（含异步消息残留清理）
@@ -256,7 +256,7 @@ mdk_agent/
 │   ├── linkio.py             # 链路原语层：把「读/写内存、读核寄存器、停/走」从 Keil(UVSOCK) 与 OpenOCD 里抽出来
 │   ├── traceproto.py         # trace 协议：ITM 解码、MTF 帧格式与 CRC8
 │   ├── trace.py              # trace：SWO / RTT（主机侧自研）/ SWD 采样 / DWT / 插桩组件部署（观测类工具两条链路通用）
-│   └── server.py             # MCP Server 与 231 个工具定义
+│   └── server.py             # MCP Server 与 246 个工具定义
 ├── components/
 │   └── trace/                # 目标侧插桩组件（ITM / RTT / UART / BUFF 四后端，只依赖 CMSIS）
 │                             #   mdk_trace.[ch] / mdk_trace_rtt.[ch] / config 默认头 / CMakeLists / README
@@ -350,7 +350,7 @@ mdkdebug read_mem --arg addr=0x20000000 --arg n=16     # 省略 call 的简写
 
 ## 暴露的 MCP 工具
 
-共 **231** 个（**默认只暴露 42 个**，其余按需装载，见[工具面](#工具面默认精简--按需装载)），分两大块：
+共 **246** 个（**默认只暴露 42 个**，其余按需装载，见[工具面](#工具面默认精简--按需装载)），分两大块：
 
 - **MDK 族（144 个）**——调试读写 / 断点与命中等待 / 外设与内存 / 符号定位 / 工程分析 / **编译·清理·烧录** / **UV4 命令行批处理调试** / **CMSIS-SVD 解码** / **工程文件与分散加载文件(.sct)受控编辑** / **复位循环识别** / Keil 生命周期管理 / **宿主机串口日志与命令应答 · Modbus 主站（RTU/ASCII + 裸帧）** / **看门狗冻结与 Cache 感知** / 环境自检引导（下表）。
 - **非 MDK 族（82 个）**——**工具链**（gcc/make/cmake 探测与调用、构建、ELF/size/objcopy、编译错误解析，10 个）/ **目标档案与多核**（接口·速度·SWO·RTT 参数档案与自动识别、工程现场配置发现、多核目标的核列举与切换，7 个）/ **OpenOCD**（会话·内存·寄存器·断点·烧录，17 个）/ **trace 与覆盖率**（SWO·RTT·采样剖析·DWT·非侵入式 scope·插桩组件部署·**代码覆盖率**·**ETM 能力探测**·**函数运行时线录制**·**目标侧缓冲后端**·**SWD 无缝流后端**·**任务表取名**，38 个）/ **RTOS 任务感知**（任务列表·栈水位·队列信号量，3 个）/ **C 代码索引**（建/同步索引·符号检索·单符号源码体·文件清单·调用关系与影响面，7 个）——不依赖 Keil，同样能在 RISC-V / ESP32 等非 MDK 芯片上工作（见[非 MDK 芯片与 trace](#非-mdk-芯片与-trace不依赖-keil)）。
@@ -550,6 +550,44 @@ H7 双核（CM7 + CM4）、RP2040 双核（M0+ × 2）这类目标上，最容�
 | `ocd_gdb` | 借 GDB 批处理做一件 OpenOCD 原生不好做的事（可指定 `elf` 与 `gdb` 路径） | `commands`、`elf?`、`gdb?` 等 |
 | `ocd_log` | 读 OpenOCD 日志尾巴（可按 `keyword` 过滤），排查启动失败用 | `lines?`、`keyword?` |
 
+### pyOCD（`pyocd_*`，15 个）
+
+第三条链路：纯 Python、进程内 `Session`（`pip install pyocd` 后 CMSIS-DAP / J-Link / ST-Link
+都能连），烧录走 CMSIS-Pack 的 FLM 算法，不需要 Keil。**可选能力**——没装 pyocd 时 server
+照常启动，工具报 `pyocd-not-installed` 并给安装提示，零新增依赖。
+
+同一根探针同一时刻只能被一个调试宿主占着（Keil / OpenOCD / pyOCD 互斥）；连不上时第一句
+提示就是「别处是否占着探针」。
+
+| 工具 | 说明 | 主要参数 |
+|------|------|----------|
+| `pyocd_list` | 列已连探针（unique_id/描述/厂商/协议）、按关键字查目标名、报 pyocd 是否安装 | `probes?`、`targets?`、`limit?` |
+| `pyocd_start` | 进程内开会话；已开时再 start 明确报错，要换配置给 `restart=true` | `probe?`、`target?`、`frequency?`、`connect_mode?`、`pack?`、`options?`、`restart?` |
+| `pyocd_stop` | 关会话并放开探针；`resume=true` 先让目标继续跑（默认不碰目标状态） | `resume?` |
+| `pyocd_status` | 会话在不在、连的哪个探针、目标实时状态与停机原因、登记的断点/观察点数 | — |
+| `pyocd_info` | 器件身份（part_number/vendor/核/状态/停机原因）+ 内存区域表 | `memory_map?` |
+| `pyocd_control` | `halt` / `resume` / `reset` / `reset_halt` / `step` / `init` | `action`、`reset_type?` |
+| `pyocd_read_mem` | 读字节：`data_hex` / `words`（按 width）/ `hexdump`，**读数自带可信度** | `addr`、`n_bytes?`、`width?`、`verify?` |
+| `pyocd_write_mem` | `data_hex` 或 `words`+`width`（小端），默认写后回读比对 | `addr`、`data_hex?`、`words?`、`width?`、`verify?` |
+| `pyocd_reg` | 读全部/指定寄存器、写单寄存器并回读、列寄存器名表 | `action?`、`names?`、`name?`、`value?` |
+| `pyocd_bp` | `set`（kind=auto/hw/sw）/ `clear` / `list`；list 只列本模块登记过的并复核 | `action`、`addr?`、`kind?` |
+| `pyocd_wp` | 观察点 `set`（read/write/read_write）/ `clear` / `list` | `action`、`addr?`、`size?`、`kind?` |
+| `pyocd_flash` | `FileProgrammer` 烧录：elf/hex 自带地址，bin 必须 `base_address` | `file`、`base_address?`、`chip_erase?`、`smart_flash?`、`trust_crc?`、`no_reset?` |
+| `pyocd_erase` | `chip` / `mass` / `sector`（sector 必须给 addresses，支持 `0x…-0x…` 区间） | `mode`、`addresses?` |
+| `pyocd_gdb` | `start` / `stop` / `status` 一个独立的 `pyocd gdbserver` 进程（要独占探针） | `action`、`port?`、`probe?`、`target?` |
+| `pyocd_log` | 一站式排障：安装状态、版本、会话参数、目标状态、gdbserver 日志尾部 | `lines?`、`keyword?` |
+
+**读数可信度**（与 Keil 链路同一套语言）：`read_confidence`=high/medium/low、
+`degenerate`=all_zero/all_ff/repeated_word、`reread_consistent`、`while_running`。
+目标 running 且两读不一致 → medium（「变量本来在变」与「读被打断」分不开）；halted 下
+两读不一致 → low（只能是链路问题）；整帧退化 → low 并写明是哪一种。条件触发
+`kind="memory"` 复用它，只认 `high` 的样本。
+
+**刻意不做**：不解析 `pyocd commander` 的交互输出（人看的格式随版本变）；不在 import 时
+import pyocd（没装的机器不该起不来）；不做 RTT/SWO（自有 `trace_buff_*`/`trace_swd_*`
+覆盖）；**不替调用方自动 halt**（停-读-走会改变被观察对象）。详见
+[docs/pyocd-link.md](./docs/pyocd-link.md)。
+
 ### trace（`trace_*`，34 个）
 
 三条通路：**SWO/ITM**（经 TPIU 单线输出）、**RTT**（目标内存环形缓冲，主机侧自研读写，不依赖 SEGGER 上位机）、**SWD 采样**（`halt` 采 PC，明确标注侵入式）。三条通路解码出的事件（含 MTF 帧）汇入同一缓冲区，由 `trace_events` 统一取。
@@ -711,19 +749,19 @@ target_guess(elf) → ocd_start(profile=...) → ocd_flash(file=...) → trace_i
 
 ### 工具面（默认精简 + 按需装载）
 
-227 个工具全量塞进上下文会稀释注意力、也吃掉上下文预算。所以**默认只暴露 42 个**（`core` 组 39 个，其中 `mdk_guide` 兼作元工具，再加另外 3 个元工具），其余 189 个**没被删掉、也没失效**，用 `toolset` 工具随时装回来：
+246 个工具全量塞进上下文会稀释注意力、也吃掉上下文预算。所以**默认只暴露 42 个**（`core` 组 39 个，其中 `mdk_guide` 兼作元工具，再加另外 3 个元工具），其余 204 个**没被删掉、也没失效**，用 `toolset` 工具随时装回来：
 
 ```text
 toolset(action="status")                        # 装了哪些组、收起多少个、怎么装回来
 toolset(action="groups")                        # 组/档总览（toolsets=mem 则列出该组工具名）
 toolset(action="load",   toolsets="mem,rtos")   # 追加装载（幂等，可反复调）
 toolset(action="unload", toolsets="trace")      # 收起
-toolset(action="load",   toolsets="all")        # 一次全装 231 个（=full/*）
+toolset(action="load",   toolsets="all")        # 一次全装 246 个（=full/*）
 ```
 
 装载也可以放在启动时：`MDKDEBUG_TOOLSETS=serial` 只留串口 14 个、`core,build`、`toolchain,target,ocd,trace` 把上百个 Keil 工具全收起来调非 MDK 芯片；`=all` 回到全开。**启动参数优先于环境变量**。
 
-共 12 个组 + 1 个档位（`core` 为默认装载组；小上下文模型另有 `nano` 极简档，见下）：
+共 13 个组 + 1 个档位（`core` 为默认装载组；小上下文模型另有 `nano` 极简档，见下）：
 
 | 组名 | 内容 |
 |---|---|
@@ -736,6 +774,7 @@ toolset(action="load",   toolsets="all")        # 一次全装 231 个（=full/*
 | `toolchain` | 非 MDK：工具链探测 / 构建 / 编译 / ELF·size·objcopy / 编译错误解析（10 个） |
 | `target` | 非 MDK：目标档案查询与自动识别、工程现场调试配置发现、多核目标列举与切换（7 个） |
 | `ocd` | 非 MDK：OpenOCD 会话 / 内存 / 寄存器 / 断点 / 烧录（17 个） |
+| `pyocd` | 非 MDK：pyOCD 进程内会话 / 内存 / 寄存器 / 断点观察点 / 烧录擦除 / GDB server（15 个） |
 | `trace` | 非 MDK：SWO / RTT / 采样 / DWT / 非侵入式 scope / 函数运行时线录制 / 插桩组件部署（含目标侧缓冲后端、SWD 无缝流后端）/ 代码覆盖率 / ETM 能力探测 / **条件等待 `trace_watch`**（38 个） |
 | `rtos` | RTOS 任务感知：任务列表 / 栈水位 / 队列信号量（3 个；跨 Keil 与 OpenOCD 两条链路） |
 | `code` | 代码结构索引（C/C++）：建/同步索引、符号检索、单符号源码体、文件清单、调用关系与影响面（7 个） |
@@ -750,8 +789,8 @@ toolset(action="load",   toolsets="all")        # 一次全装 231 个（=full/*
 |---|---|---|---|---|
 | 默认（`core` 组 + 元工具，描述 `lean`） | 42 | 约 2.2 万 | **约 3.9 万** | 不设环境变量 |
 | **`nano` 极简档**（自动用 `min` 描述档） | **16** | **约 5.4 千** | **约 1.3 万** | `MDKDEBUG_TOOLSETS=nano` 或 `toolset(action=load, toolsets="nano")` |
-| `all`（全装，描述默认 `lean`） | 231 | 约 11.9 万 | 约 24.2 万 | `toolset(action=load, toolsets="all")` |
-| `all` + `MDKDEBUG_DESC=min` | 231 | 约 7.7 万 | 约 20 万 | 工具全要，但描述只留一句摘要 |
+| `all`（全装，描述默认 `lean`） | 246 | 约 12.6 万 | 约 25.8 万 | `toolset(action=load, toolsets="all")` |
+| `all` + `MDKDEBUG_DESC=min` | 246 | 约 8.2 万 | 约 21.4 万 | 工具全要，但描述只留一句摘要 |
 | 上述任一档 + `MDKDEBUG_DESC=full` | — | 逐字节还原全文 | — | 要逐字完整说明时 |
 
 - **`nano` 档**不是「组」而是**档位**：它横跨 `core` / `build` / `trace` 三组，挑出最短入口（健康检查 / 编译烧录 / 进出调试 / 跑停 / 读写内存与变量 / 断点 / 读 trace / **取回完整说明的 `mdk_guide`** / **装卸工具面的 `toolset`**）**＋ 另外 2 个元工具**，小上下文模型也能一次装全，之后再按需加装。
@@ -1884,6 +1923,20 @@ uVision 再打开就报错。批次97 把这条纪律做成**工具能执行的�
 > **不合并的**：`uvprojx_read` / `uvprojx_edit` / `project_file_check` / `project_file_repair`
 > （读、写、体检、修复四件事，风险与返回形态都不同）、`recover_bindiff` 的两种模式之外的同构
 > 工具（后端不同，前端壳相同但底座是两套实现）、以及连接器层——那一层只有一个服务，不是重复实现。
+
+> **批次114（0.2.38）：接入 pyOCD 作为第三条调试链路（`pyocd_*`，15 个）**。没装 Keil、
+> 不想开 uVision、或在无界面机器上时，前两条链路都断；pyOCD 是纯 Python 进程内 `Session`
+> （`pip install pyocd` 后 CMSIS-DAP / J-Link / ST-Link 都能连，烧录走 CMSIS-Pack FLM）。
+> 工具面 231 → **246**，全部归入 `pyocd` 组**默认收起**，所以**默认暴露面仍是 42**、
+> 默认上下文零变化；**不新增依赖**（惰性导入，缺失报 `pyocd-not-installed` + 安装提示）。
+> 四条口径：① **读数与 Keil 同一套语言**（`read_confidence`/`degenerate`/`reread_consistent`/
+> `while_running`；running 两读不一致给 medium 不断言真假，halted 不一致给 low）；② **不自动
+> halt**（读前只报告状态，停-读-走会改变被观察对象）；③ **条件触发读数源自动选路**（Keil
+> 真连着用 Keil，否则用已开的 pyOCD 会话，都不在时回原错误路径，不静默改道）；④ **同一根
+> 探针同一时刻只有一个调试宿主**（Keil / OpenOCD / pyOCD 互斥）。真机取证：DAPLink 上
+> attach 连上、读 CPUID `71c21f41`（Cortex-M4）、halt→读 pc/sp→resume 全通。**欠账**：
+> reset / flash / erase 与 gdbserver 未做真机验证（会动未知固件现场），错误码与参数校验
+> 有单测覆盖。设计与吸收边界见 [docs/pyocd-link.md](./docs/pyocd-link.md)。
 
 > **批次113（0.2.37）：条件触发扩到内存（`kind="memory"`）——不新增工具，只多一个 kind**。
 > 入口仍是 `trigger_add`，所以注册数仍 **231**、默认暴露仍 **42**、`serial` 组仍 19。

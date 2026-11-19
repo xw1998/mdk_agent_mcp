@@ -159,7 +159,7 @@ def section_a():
     names = set(tools)
     check("A1 五个新工具都注册了",
           all(n in names for n in NEW_TOOLS), [n for n in NEW_TOOLS if n not in names])
-    check("A2 注册总数 231（本批新增 5 个）", len(names) == 231, len(names))
+    check("A2 注册总数 246（本批新增 5 个）", len(names) == 246, len(names))
     check("A3 build 组 43 个且五个都在 build 组",
           len(TB.TOOLSETS["build"]) == 43 and all(n in TB.TOOLSETS["build"]
                                                  for n in NEW_TOOLS),
@@ -674,12 +674,12 @@ def section_h():
     readme = io.open(os.path.join(ROOT, "README.md"), encoding="utf-8").read()
     skill = io.open(os.path.join(ROOT, "skills", "mdkdebug", "SKILL.md"),
                     encoding="utf-8").read()
-    check("H1 README 当前总数同步到 231", "231 个工具" in readme, None)
-    check("H2 README 的默认收起数同步到 189", "189 个" in readme, None)
+    check("H1 README 当前总数同步到 246", "246 个工具" in readme, None)
+    check("H2 README 的默认收起数同步到 204", "204 个" in readme, None)
     check("H3 README 提到五个新工具名",
           all(n in readme for n in NEW_TOOLS),
           [n for n in NEW_TOOLS if n not in readme])
-    check("H4 SKILL 同步到 231 个工具", "231 个工具" in skill, None)
+    check("H4 SKILL 同步到 246 个工具", "246 个工具" in skill, None)
     build_row = [ln for ln in readme.splitlines()
                  if ln.startswith("| `build` |")]
     check("H5 README build 组规模同步到 43 个（且列了新工具）",
